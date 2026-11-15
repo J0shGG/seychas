@@ -14,7 +14,7 @@ import { playChime, setAmbient } from './audio'
 import { todayKey, uid, yesterdayKey } from './format'
 import type { Action, DayStat, Session, Settings, State, Task } from './types'
 
-const KEY = 'seychas.v1'
+export const STORAGE_KEY = 'seychas.v1'
 const MIN_CREDIT_MS = 30_000
 
 const defaultSettings: Settings = {
@@ -41,7 +41,7 @@ const emptyState: State = {
   cyclesDate: todayKey(),
 }
 
-function getElapsed(session: Session, now = Date.now()): number {
+export function getElapsed(session: Session, now = Date.now()): number {
   if (session.status === 'done') return Math.min(session.elapsedMs, session.durationMs)
   const extra = session.runningSince ? Math.max(0, now - session.runningSince) : 0
   return session.elapsedMs + extra
@@ -135,7 +135,7 @@ function hydrate(raw: State): State {
 
 function load(): State {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return emptyState
     return hydrate(JSON.parse(raw) as State)
   } catch {
@@ -312,7 +312,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const chimed = useRef(new Set<string>())
 
   useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(state))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
   useEffect(() => {

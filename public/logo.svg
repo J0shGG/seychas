@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#140f0c"/>
+  <defs>
+    <radialGradient id="glow" cx="38%" cy="58%" r="52%">
+      <stop offset="0%" stop-color="#e8a06a" stop-opacity="0.5"/>
+      <stop offset="70%" stop-color="#e8a06a" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#e8a06a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4e6d2"/>
+      <stop offset="55%" stop-color="#e0b184"/>
+      <stop offset="100%" stop-color="#a8643c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <path d="M168 168 L78 392 L268 392 Z" fill="#e8a06a" opacity="0.2"/>
+  <rect x="286" y="372" width="132" height="28" rx="14" fill="#2c211c"/>
+  <rect x="300" y="360" width="104" height="20" rx="10" fill="url(#metal)"/>
+  <path d="M352 366 C352 250 236 214 188 156" fill="none" stroke="url(#metal)" stroke-width="20" stroke-linecap="round"/>
+  <path d="M92 176 L214 108 L246 186 L124 244 Z" fill="url(#metal)"/>
+  <path d="M112 184 L204 132 L226 184 L134 228 Z" fill="#241812"/>
+  <circle cx="156" cy="204" r="13" fill="#fff8ee"/>
+  <circle cx="156" cy="204" r="28" fill="#fff1dc" opacity="0.28"/>
+</svg>

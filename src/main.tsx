@@ -9,9 +9,18 @@ import '@fontsource/manrope/600.css'
 import '@fontsource/manrope/700.css'
 import './index.css'
 import App from './App.tsx'
+import { Island } from './island.tsx'
+
+const islandMode = new URLSearchParams(window.location.search).get('island') === '1'
+
+if (islandMode) document.documentElement.classList.add('island-root')
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  islandMode ? (
+    <Island />
+  ) : (
+    <StrictMode>
+      <App />
+    </StrictMode>
+  ),
 )
