@@ -1,7 +1,7 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
-const { fullscreenCover, liftIsland, setSmoothTimers, shapeIsland } = require('./frame.cjs')
+const { fullscreenCover, leftButtonDown, liftIsland, setSmoothTimers, shapeIsland } = require('./frame.cjs')
 const { checkForUpdate, downloadUpdate } = require('./update.cjs')
 const { startPresence } = require('./presence.cjs')
 
@@ -38,6 +38,11 @@ let islandExpanded = false
 let islandOpenHeight = 168
 let islandRadius = ISLAND_H / 2
 let islandEdge = 'top'
+let islandDragging = false
+let dragTimer = null
+let dragEdge = null
+/** @type {{ x: number, y: number } | null} */
+let dockPoint = null
 let islandAnim = null
 let islandPainted = ''
 let islandCovered = false
@@ -79,7 +84,7 @@ function islandSide() {
 }
 
 function islandBoxFor(expanded) {
-  if (islandCovered) return { width: ISLAND_H, height: ISLAND_H, radius: ISLAND_H / 2 }
+  if (islandCovered && !expanded) return { width: ISLAND_H, height: ISLAND_H, radius: ISLAND_H / 2 }
   if (!islandSide()) {
     if (expanded) {
       const height = Math.max(ISLAND_OPEN_MIN, Math.min(ISLAND_OPEN_MAX, Math.round(islandOpenHeight)))
@@ -125,6 +130,7 @@ function applyCovered(covered) {
 }
 
 function refreshCovered() {
+  if (islandDragging) return
   if (!islandWanted || !island || island.isDestroyed() || !island.isVisible()) return
   const covered = readCovered()
   if (covered) {
@@ -162,9 +168,11 @@ function cancelIslandAnim() {
 }
 
 function islandTarget() {
-  const point = anchor
-    ? { x: Math.round(anchor.x + anchor.width / 2), y: anchor.y + 24 }
-    : screen.getCursorScreenPoint()
+  // A drop on another monitor has to win over the main window, or the next tuck jumps back.
+  const point = dockPoint
+    || (anchor
+      ? { x: Math.round(anchor.x + anchor.width / 2), y: anchor.y + 24 }
+      : screen.getCursorScreenPoint())
   const { workArea } = screen.getDisplayNearestPoint(point)
   const box = islandBox()
   return placeBox(box, workArea)
@@ -192,8 +200,143 @@ function placeBox(box, workArea) {
   return { x, y, width, height, radius: box.radius }
 }
 
+function clamp(value, min, max) {
+  if (max < min) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+const DRAG_MAGNET = 112
+
+function chooseEdge(cursor, workArea) {
+  const ranks = [
+    ['top', Math.abs(cursor.y - workArea.y)],
+    ['left', Math.abs(cursor.x - workArea.x)],
+    ['right', Math.abs(cursor.x - (workArea.x + workArea.width))],
+  ].sort((a, b) => a[1] - b[1])
+  let edge = ranks[0][0]
+  if (dragEdge && dragEdge !== edge) {
+    const held = ranks.find((rank) => rank[0] === dragEdge)
+    if (held && held[1] <= DRAG_MAGNET && held[1] < ranks[0][1] + 36) edge = dragEdge
+  }
+  const picked = ranks.find((rank) => rank[0] === edge)
+  return { edge, distance: picked[1] }
+}
+
+function dragFrame(cursor) {
+  const { workArea } = screen.getDisplayNearestPoint(cursor)
+  const size = ISLAND_H
+  const margin = 10
+  const chosen = chooseEdge(cursor, workArea)
+  const minX = workArea.x + margin
+  const maxX = workArea.x + workArea.width - size - margin
+  const minY = workArea.y + margin
+  const maxY = workArea.y + workArea.height - size - margin
+  let x = clamp(cursor.x - size / 2, minX, maxX)
+  let y = clamp(cursor.y - size / 2, minY, maxY)
+  if (chosen.distance <= DRAG_MAGNET) {
+    dragEdge = chosen.edge
+    if (chosen.edge === 'left') x = minX
+    else if (chosen.edge === 'right') x = maxX
+    else y = minY
+  } else {
+    dragEdge = null
+  }
+  return {
+    edge: chosen.edge,
+    x: Math.round(x),
+    y: Math.round(y),
+    width: size,
+    height: size,
+    radius: size / 2,
+  }
+}
+
+function cancelIslandDrag() {
+  const was = islandDragging
+  islandDragging = false
+  dragEdge = null
+  if (dragTimer) clearTimeout(dragTimer)
+  dragTimer = null
+  if (was) setSmoothTimers(false)
+  if (was && island && !island.isDestroyed()) island.webContents.send('seychas:island-dragging', false)
+}
+
+function publishIslandEdge(edge) {
+  const mainAlive = Boolean(win && !win.isDestroyed())
+  if (mainAlive) win.webContents.send('seychas:island-edge-set', edge, false)
+  if (island && !island.isDestroyed()) island.webContents.send('seychas:island-edge-set', edge, !mainAlive)
+}
+
+function finishIslandDrag() {
+  if (!islandDragging) return
+  const cursor = screen.getCursorScreenPoint()
+  const { workArea } = screen.getDisplayNearestPoint(cursor)
+  const chosen = chooseEdge(cursor, workArea)
+  islandDragging = false
+  if (dragTimer) clearTimeout(dragTimer)
+  dragTimer = null
+  dragEdge = null
+  setSmoothTimers(false)
+  islandEdge = chosen.edge
+  dockPoint = { x: cursor.x, y: cursor.y }
+  islandExpanded = false
+  islandCovered = readCovered()
+  coverMisses = 0
+  publishCovered()
+  publishIslandEdge(chosen.edge)
+  placeIsland(true)
+  if (island && !island.isDestroyed()) island.webContents.send('seychas:island-dragging', false)
+}
+
+function dragTick() {
+  dragTimer = null
+  if (!islandDragging || !island || island.isDestroyed()) {
+    cancelIslandDrag()
+    return
+  }
+  if (!leftButtonDown()) {
+    finishIslandDrag()
+    return
+  }
+  const frame = dragFrame(screen.getCursorScreenPoint())
+  applyIslandFrame({
+    x: frame.x,
+    y: frame.y,
+    width: frame.width,
+    height: frame.height,
+    radius: frame.radius,
+  })
+  dragTimer = setTimeout(dragTick, ISLAND_FRAME_MS)
+}
+
+function beginIslandDrag() {
+  if (islandDragging) return true
+  if (!islandWanted || !island || island.isDestroyed() || !island.isVisible()) return false
+  islandDragging = true
+  islandExpanded = false
+  dragEdge = null
+  cancelIslandAnim()
+  setSmoothTimers(true)
+  const frame = dragFrame(screen.getCursorScreenPoint())
+  applyIslandFrame({
+    x: frame.x,
+    y: frame.y,
+    width: frame.width,
+    height: frame.height,
+    radius: frame.radius,
+  })
+  island.webContents.send('seychas:island-dragging', true)
+  if (!leftButtonDown()) {
+    finishIslandDrag()
+    return true
+  }
+  dragTimer = setTimeout(dragTick, ISLAND_FRAME_MS)
+  return true
+}
+
 function pointerInIsland() {
-  if (!island || island.isDestroyed() || !island.isVisible() || islandCovered) return false
+  if (islandDragging) return false
+  if (!island || island.isDestroyed() || !island.isVisible()) return false
   const cursor = screen.getCursorScreenPoint()
   const { workArea } = screen.getDisplayNearestPoint(cursor)
   const collapsed = placeBox(islandBoxFor(false), workArea)
@@ -217,6 +360,7 @@ function applyIslandFrame(frame) {
 }
 
 function placeIsland(animated) {
+  if (islandDragging) return
   if (!island || island.isDestroyed()) return
   const to = islandTarget()
   const fromBounds = island.getBounds()
@@ -290,6 +434,7 @@ function showIsland() {
 }
 
 function hideIsland() {
+  cancelIslandDrag()
   islandWanted = false
   islandExpanded = false
   islandCovered = false
@@ -323,15 +468,23 @@ function quitFromTray() {
 }
 
 function loadTrayImage() {
-  const file = path.join(__dirname, '..', 'build', 'icon.ico')
-  const image = nativeImage.createFromBuffer(fs.readFileSync(file))
-  const sized = image.resize({ width: 16, height: 16 })
-  return sized.isEmpty() ? image : sized
+  const candidates = [
+    path.join(__dirname, 'tray.png'),
+    path.join(__dirname, '..', 'build', 'icon.png'),
+  ]
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue
+    const image = nativeImage.createFromPath(file)
+    if (!image.isEmpty()) return image
+  }
+  return nativeImage.createEmpty()
 }
 
 function createTray() {
   if (tray) return
-  tray = new Tray(loadTrayImage())
+  const image = loadTrayImage()
+  if (image.isEmpty()) return
+  tray = new Tray(image)
   tray.setToolTip('Сейчас')
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -454,7 +607,7 @@ ipcMain.on('seychas:restore', () => {
 })
 
 ipcMain.on('seychas:island-expanded', (_event, expanded, height) => {
-  if (islandCovered && expanded) return
+  if (islandDragging) return
   const next = Boolean(expanded)
   const nextHeight = Number.isFinite(height) ? height : islandOpenHeight
   if (next === islandExpanded && Math.round(nextHeight) === Math.round(islandOpenHeight)) return
@@ -468,7 +621,10 @@ ipcMain.handle('seychas:pointer-inside', () => pointerInIsland())
 
 ipcMain.handle('seychas:covered', () => islandCovered)
 
+ipcMain.handle('seychas:island-drag-start', () => beginIslandDrag())
+
 ipcMain.on('seychas:island-edge', (_event, edge) => {
+  if (islandDragging) return
   const next = edge === 'left' || edge === 'right' ? edge : 'top'
   if (next === islandEdge) return
   islandEdge = next
@@ -540,6 +696,7 @@ if (!locked) {
     quitting = true
   })
   app.on('will-quit', () => {
+    cancelIslandDrag()
     cancelIslandAnim()
     stopPresence?.()
     stopPresence = null

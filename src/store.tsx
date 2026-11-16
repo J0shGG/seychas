@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react'
 import lampIcon from './assets/icon.jpg'
-import { playChime, setAmbient } from './audio'
+import { playChime, setAmbient, setVolume } from './audio'
 import { todayKey, uid, yesterdayKey } from './format'
 import type { Action, DayStat, IslandEdge, Session, Settings, State, Task, ThemeId } from './types'
 
@@ -24,6 +24,7 @@ const defaultSettings: Settings = {
   cyclesUntilLong: 4,
   chime: true,
   ambient: 'off',
+  volume: 1,
   notify: false,
   islandEdge: 'top',
   theme: 'lamp',
@@ -36,6 +37,10 @@ function cleanSettings(raw: Partial<Settings> | undefined): Settings {
   const settings = { ...defaultSettings, ...raw }
   if (!ISLAND_EDGES.includes(settings.islandEdge)) settings.islandEdge = 'top'
   if (!THEMES.includes(settings.theme)) settings.theme = 'lamp'
+  const level = Number(settings.volume)
+  settings.volume = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 1
+  const focus = Math.round(Number(settings.focusMin))
+  settings.focusMin = Number.isFinite(focus) ? Math.min(180, Math.max(1, focus)) : 25
   return settings
 }
 
@@ -346,6 +351,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ping(title, body)
     }
   }, [state.session, state.settings.chime, state.settings.notify])
+
+  useEffect(() => {
+    setVolume(state.settings.volume)
+  }, [state.settings.volume])
 
   useEffect(() => {
     const on = state.session?.status === 'running' && state.session.kind === 'focus'

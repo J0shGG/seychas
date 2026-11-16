@@ -1,9 +1,28 @@
 import type { AmbientKind } from './types'
 
 let ctx: AudioContext | null = null
+let output: GainNode | null = null
 let master: GainNode | null = null
 let source: AudioBufferSourceNode | null = null
 let crackleTimer: number | null = null
+let volume = 1
+
+function outputNode(): GainNode {
+  const c = audioContext()
+  if (!output) {
+    output = c.createGain()
+    output.gain.value = volume
+    output.connect(c.destination)
+  }
+  return output
+}
+
+export function setVolume(level: number): void {
+  const next = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 1
+  volume = next
+  if (!output || !ctx) return
+  output.gain.setTargetAtTime(next, ctx.currentTime, 0.03)
+}
 
 function audioContext(): AudioContext {
   if (!ctx) ctx = new AudioContext()
@@ -56,7 +75,7 @@ export async function setAmbient(kind: AmbientKind): Promise<void> {
 
   master = c.createGain()
   master.gain.value = 0.0001
-  master.connect(c.destination)
+  master.connect(outputNode())
 
   const filter = c.createBiquadFilter()
   const src = c.createBufferSource()
@@ -123,7 +142,7 @@ export async function playChime(): Promise<void> {
     g.gain.exponentialRampToValueAtTime(0.08, t + 0.02)
     g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4)
     o.connect(g)
-    g.connect(c.destination)
+    g.connect(outputNode())
     o.start(t)
     o.stop(t + 1.5)
   })

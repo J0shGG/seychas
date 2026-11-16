@@ -42,6 +42,8 @@ const GetMonitorInfoW = user32.func('int __stdcall GetMonitorInfoW(void *monitor
 const SetWindowPos = user32.func(
   'int __stdcall SetWindowPos(void *hwnd, intptr insertAfter, int x, int y, int cx, int cy, uint flags)',
 )
+const GetAsyncKeyState = user32.func('short __stdcall GetAsyncKeyState(int vKey)')
+const VK_LBUTTON = 0x01
 const DwmGetWindowAttribute = dwmapi.func(
   'int __stdcall DwmGetWindowAttribute(void *hwnd, uint attribute, void *value, uint size)',
 )
@@ -52,6 +54,12 @@ const timeEndPeriod = winmm.func('uint32 __stdcall timeEndPeriod(uint32 period)'
 let smoothTimers = false
 let styledHwnd = 0n
 let regionKey = ''
+
+// The drag circle snaps off the cursor, so the island window stops receiving mouseup.
+function leftButtonDown() {
+  if (process.platform !== 'win32') return false
+  return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) !== 0
+}
 
 // Windows timers normally wake every 15.6ms, so setTimeout(16) lands near 30fps.
 function setSmoothTimers(on) {
@@ -279,4 +287,4 @@ function shapeIslandNow(win, radiusDip, force) {
   return { cornerHr, borderHr, regionOk, px, dip }
 }
 
-module.exports = { shapeIsland, fullscreenCover, liftIsland, setSmoothTimers }
+module.exports = { shapeIsland, fullscreenCover, liftIsland, setSmoothTimers, leftButtonDown }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { formatClock, formatMinutes, plural, todayKey } from './format'
 import { applyEdge, applyTheme } from './look'
 import { STORAGE_KEY, getElapsed } from './store'
@@ -45,14 +45,19 @@ export function Island() {
   const { state, now } = useLiveState()
   const [open, setOpen] = useState(false)
   const [covered, setCovered] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [placedEdge, setPlacedEdge] = useState<IslandEdge | null>(null)
   const leaveTimer = useRef(0)
   const watchRef = useRef(0)
   const hoverGen = useRef(0)
-  const coveredRef = useRef(false)
   const stopHover = useRef(() => {})
-  const edge: IslandEdge = state?.settings?.islandEdge === 'left' || state?.settings?.islandEdge === 'right'
+  const draggingRef = useRef(false)
+  const swallowClick = useRef(false)
+  const stopPointer = useRef<(() => void) | null>(null)
+  const storedEdge: IslandEdge = state?.settings?.islandEdge === 'left' || state?.settings?.islandEdge === 'right'
     ? state.settings.islandEdge
     : 'top'
+  const edge = placedEdge ?? storedEdge
 
   useEffect(() => {
     applyTheme(state?.settings?.theme)
@@ -63,9 +68,46 @@ export function Island() {
   }, [edge])
 
   useEffect(() => {
+    if (placedEdge && storedEdge === placedEdge) setPlacedEdge(null)
+  }, [placedEdge, storedEdge])
+
+  useEffect(() => {
+    return window.seychas?.onIslandEdge?.((next, persist) => {
+      if (next !== 'top' && next !== 'left' && next !== 'right') return
+      setPlacedEdge(next)
+      if (!persist) return
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY)
+        if (!raw) return
+        const parsed = JSON.parse(raw) as State
+        if (!parsed.settings) return
+        parsed.settings.islandEdge = next
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+      } catch {
+        /* the desk window stores the edge when it is open */
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    return window.seychas?.onDragging?.((next) => {
+      draggingRef.current = next
+      setDragging(next)
+      if (next) {
+        stopHover.current()
+        setOpen(false)
+        return
+      }
+      swallowClick.current = true
+      window.setTimeout(() => {
+        swallowClick.current = false
+      }, 400)
+    })
+  }, [])
+
+  useEffect(() => {
     let alive = true
     const mark = (next: boolean) => {
-      coveredRef.current = next
       setCovered(next)
       if (next) {
         stopHover.current()
@@ -127,13 +169,14 @@ export function Island() {
   }
 
   function collapseNow() {
+    if (draggingRef.current) return
     stopHover.current()
     setOpen(false)
     window.seychas?.setExpanded?.(false, ISLAND_COLLAPSED)
   }
 
   function expand() {
-    if (coveredRef.current) return
+    if (draggingRef.current) return
     window.clearTimeout(leaveTimer.current)
     const gen = hoverGen.current
     setOpen(true)
@@ -156,6 +199,7 @@ export function Island() {
   }
 
   function collapse() {
+    if (draggingRef.current) return
     window.clearTimeout(leaveTimer.current)
     leaveTimer.current = window.setTimeout(() => {
       const ask = window.seychas?.pointerInside
@@ -169,18 +213,22 @@ export function Island() {
     }, 80)
   }
 
-  useEffect(() => () => stopHover.current(), [])
+  useEffect(() => () => {
+    stopHover.current()
+    stopPointer.current?.()
+  }, [])
 
   const side = edge !== 'top'
-  const rail = side && !open && !covered
+  const rail = side && !open && !covered && !dragging
   const cls = [
     'island',
-    open ? 'is-open' : '',
+    open && !dragging ? 'is-open' : '',
     running ? 'is-running' : '',
     paused ? 'is-paused' : '',
     done ? 'is-done' : '',
     session ? '' : 'is-idle',
     covered ? 'is-covered' : '',
+    dragging ? 'is-dragging' : '',
     side ? 'is-side' : '',
     edge === 'left' ? 'is-left' : '',
     edge === 'right' ? 'is-right' : '',
@@ -188,13 +236,58 @@ export function Island() {
     .filter(Boolean)
     .join(' ')
 
+  function onPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return
+    stopPointer.current?.()
+    const startX = event.screenX
+    const startY = event.screenY
+    let stop = () => {}
+    const onMove = (ev: PointerEvent) => {
+      if ((ev.buttons & 1) === 0) {
+        stop()
+        return
+      }
+      if (draggingRef.current) return
+      const dx = ev.screenX - startX
+      const dy = ev.screenY - startY
+      if (dx * dx + dy * dy < 64) return
+      stop()
+      draggingRef.current = true
+      swallowClick.current = true
+      stopHover.current()
+      setOpen(false)
+      setDragging(true)
+      void window.seychas?.beginDrag?.().then((started) => {
+        if (started) return
+        draggingRef.current = false
+        swallowClick.current = false
+        setDragging(false)
+      })
+    }
+    stop = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', stop)
+      if (stopPointer.current === stop) stopPointer.current = null
+    }
+    stopPointer.current = stop
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', stop)
+  }
+
   return (
     <button
       type="button"
       className={cls}
       onMouseEnter={expand}
       onMouseLeave={collapse}
-      onClick={() => window.seychas?.restore()}
+      onPointerDown={onPointerDown}
+      onClick={(event) => {
+        if (swallowClick.current || draggingRef.current) {
+          event.preventDefault()
+          return
+        }
+        window.seychas?.restore()
+      }}
       aria-label={clock ? `${label}, ${clock}. ${pace}. Открыть приложение` : 'Открыть Сейчас'}
     >
       <span className="island-top">

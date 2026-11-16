@@ -10,6 +10,11 @@ declare global {
       setTheme?: (theme: 'lamp' | 'light' | 'dark' | 'ink') => void
       covered?: () => Promise<boolean>
       pointerInside?: () => Promise<boolean>
+      beginDrag?: () => Promise<boolean>
+      onDragging?: (callback: (dragging: boolean) => void) => () => void
+      onIslandEdge?: (
+        callback: (edge: 'top' | 'left' | 'right', persist: boolean) => void,
+      ) => () => void
       onCovered?: (callback: (covered: boolean) => void) => () => void
       checkUpdate?: () => Promise<{ update: { version: string; current: string } | null }>
       installUpdate?: () => Promise<{ ok: boolean; message?: string }>

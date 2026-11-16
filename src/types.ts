@@ -48,6 +48,7 @@ export type Settings = {
   cyclesUntilLong: number
   chime: boolean
   ambient: AmbientKind
+  volume: number
   notify: boolean
   islandEdge: IslandEdge
   theme: ThemeId

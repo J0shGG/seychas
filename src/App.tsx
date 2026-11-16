@@ -35,13 +35,20 @@ export default function App() {
 }
 
 function Root() {
-  const { state } = useStore()
+  const { state, dispatch } = useStore()
   const update = useUpdateOffer()
 
   useEffect(() => {
     applyTheme(state.settings.theme)
     applyEdge(state.settings.islandEdge)
   }, [state.settings.theme, state.settings.islandEdge])
+
+  useEffect(() => {
+    return window.seychas?.onIslandEdge?.((edge) => {
+      if (edge !== 'top' && edge !== 'left' && edge !== 'right') return
+      dispatch({ type: 'UPDATE_SETTINGS', patch: { islandEdge: edge } })
+    })
+  }, [dispatch])
   return (
     <>
       {state.onboarded ? (
@@ -168,7 +175,7 @@ function Desk({
                 <CalendarIcon />
               </button>
               <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Настройки">
-                ✶
+                <SettingsIcon />
               </button>
               <button className="icon-btn" onClick={() => void toggleFullscreen()} title="Полный экран">
                 ▢
@@ -192,7 +199,7 @@ function Desk({
       <footer className="footer">
         <span>
           <span className="kbd">N</span> новая · <span className="kbd">Пробел</span> лампа ·{' '}
-          <span className="kbd">Enter</span> готово · <span className="kbd">Esc</span> отпустить
+          <span className="kbd">Enter</span> готово · <span className="kbd">Esc</span> сбросить
         </span>
         <span>Задачи остаются на этом компьютере</span>
       </footer>
@@ -276,6 +283,64 @@ function TaskColumn() {
   )
 }
 
+const FOCUS_PRESETS = [15, 25, 50, 90]
+
+function clampFocusMinutes(raw: string): number | null {
+  if (!/^\d+$/.test(raw)) return null
+  const minutes = Number(raw)
+  if (minutes < 1 || minutes > 180) return null
+  return minutes
+}
+
+function MinutesField({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number
+  disabled?: boolean
+  onCommit: (minutes: number) => void
+}) {
+  const [text, setText] = useState(String(value))
+
+  useEffect(() => {
+    setText(String(value))
+  }, [value])
+
+  function commit() {
+    const next = clampFocusMinutes(text)
+    if (next == null) {
+      setText(String(value))
+      return
+    }
+    setText(String(next))
+    if (next !== value) onCommit(next)
+  }
+
+  const custom = !FOCUS_PRESETS.includes(value)
+
+  return (
+    <label className={`chip minutes ${custom ? 'on' : ''}${disabled ? ' is-disabled' : ''}`}>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={text}
+        disabled={disabled}
+        aria-label="Свои минуты"
+        onChange={(event) => setText(event.target.value.replace(/\D/g, '').slice(0, 3))}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          commit()
+          event.currentTarget.blur()
+        }}
+      />
+      <span>мин</span>
+    </label>
+  )
+}
+
 function Stage() {
   const { state, dispatch, remaining, elapsed } = useStore()
   const session = state.session
@@ -301,7 +366,7 @@ function Stage() {
   return (
     <section className="panel stage">
       <div className="presets">
-        {[15, 25, 50, 90].map((m) => (
+        {FOCUS_PRESETS.map((m) => (
           <button
             key={m}
             className={`chip ${state.settings.focusMin === m ? 'on' : ''}`}
@@ -311,6 +376,11 @@ function Stage() {
             {m} мин
           </button>
         ))}
+        <MinutesField
+          value={state.settings.focusMin}
+          disabled={session?.status === 'running'}
+          onCommit={(minutes) => dispatch({ type: 'UPDATE_SETTINGS', patch: { focusMin: minutes } })}
+        />
       </div>
 
       <div className="ring-wrap">
@@ -345,7 +415,7 @@ function Stage() {
               Пауза
             </button>
             <button className="ghost" onClick={() => dispatch({ type: 'STOP' })}>
-              Отпустить
+              Сбросить
             </button>
           </>
         )}
@@ -355,7 +425,7 @@ function Stage() {
               Продолжить
             </button>
             <button className="ghost" onClick={() => dispatch({ type: 'STOP' })}>
-              Отпустить
+              Сбросить
             </button>
           </>
         )}
@@ -655,6 +725,21 @@ function Journal({
   )
 }
 
+function SettingsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function CalendarIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -849,26 +934,6 @@ function Settings({ onClose }: { onClose: () => void }) {
       <div className="card settings-card" onClick={(e) => e.stopPropagation()}>
         <h3>Настройки</h3>
         <div className="field">
-          <span>Островок</span>
-          <div className="presets">
-            {(
-              [
-                ['top', 'Сверху'],
-                ['left', 'Слева'],
-                ['right', 'Справа'],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                className={`chip ${s.islandEdge === id ? 'on' : ''}`}
-                onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { islandEdge: id } })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field">
           <span>Тема</span>
           <div className="presets">
             {(
@@ -892,7 +957,7 @@ function Settings({ onClose }: { onClose: () => void }) {
         <div className="field">
           <span>Длина круга</span>
           <div className="presets">
-            {[15, 25, 50, 90].map((m) => (
+            {FOCUS_PRESETS.map((m) => (
               <button
                 key={m}
                 className={`chip ${s.focusMin === m ? 'on' : ''}`}
@@ -901,6 +966,10 @@ function Settings({ onClose }: { onClose: () => void }) {
                 {m}
               </button>
             ))}
+            <MinutesField
+              value={s.focusMin}
+              onCommit={(minutes) => dispatch({ type: 'UPDATE_SETTINGS', patch: { focusMin: minutes } })}
+            />
           </div>
         </div>
         <div className="field">
@@ -925,6 +994,24 @@ function Settings({ onClose }: { onClose: () => void }) {
                 {label}
               </button>
             ))}
+          </div>
+        </div>
+        <div className="field">
+          <span>Громкость</span>
+          <div className="volume">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={Math.round(s.volume * 100)}
+              aria-label="Громкость"
+              onChange={(event) => {
+                unlockAudio()
+                dispatch({ type: 'UPDATE_SETTINGS', patch: { volume: Number(event.target.value) / 100 } })
+              }}
+            />
+            <em>{Math.round(s.volume * 100)}%</em>
           </div>
         </div>
         <div className="toggle-row">
