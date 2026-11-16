@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatClock, formatMinutes, plural, todayKey } from './format'
+import { applyEdge, applyTheme } from './look'
 import { STORAGE_KEY, getElapsed } from './store'
-import type { State } from './types'
+import type { IslandEdge, State } from './types'
 
 function readState(): State | null {
   try {
@@ -43,14 +44,27 @@ function expandedHeight(hasTitle: boolean, hasIntention: boolean, hasProgress: b
 export function Island() {
   const { state, now } = useLiveState()
   const [open, setOpen] = useState(false)
+  const [covered, setCovered] = useState(false)
   const leaveTimer = useRef(0)
   const coveredRef = useRef(false)
+  const edge: IslandEdge = state?.settings?.islandEdge === 'left' || state?.settings?.islandEdge === 'right'
+    ? state.settings.islandEdge
+    : 'top'
+
+  useEffect(() => {
+    applyTheme(state?.settings?.theme)
+  }, [state?.settings?.theme])
+
+  useEffect(() => {
+    applyEdge(edge)
+  }, [edge])
 
   useEffect(() => {
     let alive = true
-    const mark = (covered: boolean) => {
-      coveredRef.current = covered
-      if (covered) setOpen(false)
+    const mark = (next: boolean) => {
+      coveredRef.current = next
+      setCovered(next)
+      if (next) setOpen(false)
     }
     window.seychas?.covered?.().then((covered) => {
       if (alive) mark(Boolean(covered))
@@ -114,6 +128,8 @@ export function Island() {
     }, 90)
   }
 
+  const side = edge !== 'top'
+  const rail = side && !open && !covered
   const cls = [
     'island',
     open ? 'is-open' : '',
@@ -121,6 +137,10 @@ export function Island() {
     paused ? 'is-paused' : '',
     done ? 'is-done' : '',
     session ? '' : 'is-idle',
+    covered ? 'is-covered' : '',
+    side ? 'is-side' : '',
+    edge === 'left' ? 'is-left' : '',
+    edge === 'right' ? 'is-right' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -136,7 +156,11 @@ export function Island() {
     >
       <span className="island-top">
         <span className="island-dot" aria-hidden="true" />
-        {clock ? <span className="island-time">{clock}</span> : open ? <span className="island-time">Сейчас</span> : null}
+        {clock ? (
+          <span className="island-time">{clock}</span>
+        ) : open || rail ? (
+          <span className="island-time">Сейчас</span>
+        ) : null}
         <span className="island-label">{label}</span>
         {status ? <span className="island-state">{status}</span> : null}
       </span>
@@ -150,7 +174,7 @@ export function Island() {
       </span>
       {session && !done ? (
         <span className="island-progress" aria-hidden="true">
-          <span style={{ transform: `scaleX(${progress})` }} />
+          <span style={{ transform: rail ? `scaleY(${progress})` : `scaleX(${progress})` }} />
         </span>
       ) : null}
     </button>

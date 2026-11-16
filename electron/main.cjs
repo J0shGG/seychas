@@ -2,6 +2,8 @@ const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, shell } = 
 const fs = require('node:fs')
 const path = require('node:path')
 const { fullscreenCover, liftIsland, shapeIsland } = require('./frame.cjs')
+const { checkForUpdate, downloadUpdate } = require('./update.cjs')
+const { startPresence } = require('./presence.cjs')
 
 const APP_ID = 'app.seychas.desktop'
 const ISLAND_W = 292
@@ -9,6 +11,15 @@ const ISLAND_H = 48
 const ISLAND_OPEN_W = 340
 const ISLAND_OPEN_MIN = 120
 const ISLAND_OPEN_MAX = 220
+const SIDE_OPEN_W = 280
+const SIDE_OPEN_MIN = 168
+const SIDE_OPEN_MAX = 300
+const THEME_BG = {
+  lamp: '#120e0b',
+  light: '#f3eadc',
+  dark: '#101012',
+  ink: '#101624',
+}
 
 app.setAppUserModelId(APP_ID)
 Menu.setApplicationMenu(null)
@@ -26,11 +37,14 @@ let islandWanted = false
 let islandExpanded = false
 let islandOpenHeight = 168
 let islandRadius = ISLAND_H / 2
+let islandEdge = 'top'
 let islandAnim = null
 let islandCovered = false
 let coverMisses = 0
 let coverTimer = null
 let quitting = false
+let latestCount = null
+let stopPresence = null
 const ISLAND_ANIM_MS = 320
 
 function iconFile() {
@@ -58,13 +72,24 @@ function rememberAnchor() {
   anchor = win.getBounds()
 }
 
+function islandSide() {
+  return islandEdge === 'left' || islandEdge === 'right'
+}
+
 function islandBox() {
-  if (islandExpanded) {
-    const height = Math.max(ISLAND_OPEN_MIN, Math.min(ISLAND_OPEN_MAX, Math.round(islandOpenHeight)))
-    return { width: ISLAND_OPEN_W, height, radius: 22 }
-  }
   if (islandCovered) return { width: ISLAND_H, height: ISLAND_H, radius: ISLAND_H / 2 }
-  return { width: ISLAND_W, height: ISLAND_H, radius: ISLAND_H / 2 }
+  if (!islandSide()) {
+    if (islandExpanded) {
+      const height = Math.max(ISLAND_OPEN_MIN, Math.min(ISLAND_OPEN_MAX, Math.round(islandOpenHeight)))
+      return { width: ISLAND_OPEN_W, height, radius: 22 }
+    }
+    return { width: ISLAND_W, height: ISLAND_H, radius: ISLAND_H / 2 }
+  }
+  if (islandExpanded) {
+    const height = Math.max(SIDE_OPEN_MIN, Math.min(SIDE_OPEN_MAX, Math.round(islandOpenHeight)))
+    return { width: SIDE_OPEN_W, height, radius: 22 }
+  }
+  return { width: ISLAND_H, height: ISLAND_W, radius: ISLAND_H / 2 }
 }
 
 function readCovered() {
@@ -123,9 +148,25 @@ function islandTarget() {
     : screen.getCursorScreenPoint()
   const { workArea } = screen.getDisplayNearestPoint(point)
   const box = islandBox()
-  const width = Math.min(box.width, Math.max(180, workArea.width - 24))
-  const x = Math.round(workArea.x + (workArea.width - width) / 2)
-  return { x, y: workArea.y + 10, width, height: box.height, radius: box.radius }
+  const margin = 10
+  let width = box.width
+  let height = box.height
+  if (islandSide()) {
+    height = Math.min(box.height, Math.max(ISLAND_H, workArea.height - 24))
+    width = Math.min(box.width, Math.max(ISLAND_H, workArea.width - 24))
+  } else {
+    width = Math.min(box.width, Math.max(180, workArea.width - 24))
+  }
+  let x = Math.round(workArea.x + (workArea.width - width) / 2)
+  let y = workArea.y + margin
+  if (islandEdge === 'left') {
+    x = workArea.x + margin
+    y = Math.round(workArea.y + (workArea.height - height) / 2)
+  } else if (islandEdge === 'right') {
+    x = Math.round(workArea.x + workArea.width - width - margin)
+    y = Math.round(workArea.y + (workArea.height - height) / 2)
+  }
+  return { x, y, width, height, radius: box.radius }
 }
 
 function applyIslandFrame(frame) {
@@ -363,6 +404,54 @@ ipcMain.on('seychas:island-expanded', (_event, expanded, height) => {
 
 ipcMain.handle('seychas:covered', () => islandCovered)
 
+ipcMain.on('seychas:island-edge', (_event, edge) => {
+  const next = edge === 'left' || edge === 'right' ? edge : 'top'
+  if (next === islandEdge) return
+  islandEdge = next
+  islandExpanded = false
+  if (!islandWanted || !island || island.isDestroyed() || !island.isVisible()) return
+  placeIsland(true)
+})
+
+ipcMain.on('seychas:theme', (_event, theme) => {
+  const color = THEME_BG[theme] || THEME_BG.lamp
+  if (!win || win.isDestroyed()) return
+  win.setBackgroundColor(color)
+})
+
+ipcMain.handle('seychas:presence', () => latestCount)
+
+ipcMain.handle('seychas:update-check', async () => {
+  try {
+    const update = await checkForUpdate(app.getVersion())
+    if (!update) return { update: null }
+    return { update: { version: update.version, current: update.current } }
+  } catch (error) {
+    console.error('update check', error)
+    return { update: null }
+  }
+})
+
+ipcMain.handle('seychas:update-install', async (event) => {
+  try {
+    const file = await downloadUpdate((ratio) => {
+      if (event.sender.isDestroyed()) return
+      event.sender.send('seychas:update-progress', ratio)
+    })
+    quitting = true
+    const opened = await shell.openPath(file)
+    if (opened) {
+      quitting = false
+      return { ok: false, message: 'Не получилось открыть установщик.' }
+    }
+    app.quit()
+    return { ok: true }
+  } catch (error) {
+    console.error('update install', error)
+    return { ok: false, message: 'Не получилось скачать обновление.' }
+  }
+})
+
 const locked = app.requestSingleInstanceLock()
 if (!locked) {
   app.quit()
@@ -378,11 +467,17 @@ if (!locked) {
       if (islandWanted) placeIsland()
     })
     coverTimer = setInterval(refreshCovered, 250)
+    stopPresence = startPresence((count) => {
+      latestCount = count
+      if (win && !win.isDestroyed()) win.webContents.send('seychas:presence', count)
+    })
   })
   app.on('before-quit', () => {
     quitting = true
   })
   app.on('will-quit', () => {
+    stopPresence?.()
+    stopPresence = null
     if (coverTimer) clearInterval(coverTimer)
     coverTimer = null
     tray?.destroy()

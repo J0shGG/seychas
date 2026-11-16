@@ -12,7 +12,7 @@ import {
 import lampIcon from './assets/icon.jpg'
 import { playChime, setAmbient } from './audio'
 import { todayKey, uid, yesterdayKey } from './format'
-import type { Action, DayStat, Session, Settings, State, Task } from './types'
+import type { Action, DayStat, IslandEdge, Session, Settings, State, Task, ThemeId } from './types'
 
 export const STORAGE_KEY = 'seychas.v1'
 const MIN_CREDIT_MS = 30_000
@@ -25,6 +25,18 @@ const defaultSettings: Settings = {
   chime: true,
   ambient: 'off',
   notify: false,
+  islandEdge: 'top',
+  theme: 'lamp',
+}
+
+const ISLAND_EDGES: IslandEdge[] = ['top', 'left', 'right']
+const THEMES: ThemeId[] = ['lamp', 'light', 'dark', 'ink']
+
+function cleanSettings(raw: Partial<Settings> | undefined): Settings {
+  const settings = { ...defaultSettings, ...raw }
+  if (!ISLAND_EDGES.includes(settings.islandEdge)) settings.islandEdge = 'top'
+  if (!THEMES.includes(settings.theme)) settings.theme = 'lamp'
+  return settings
 }
 
 const emptyState: State = {
@@ -113,7 +125,7 @@ function hydrate(raw: State): State {
   let state: State = {
     ...emptyState,
     ...raw,
-    settings: { ...defaultSettings, ...raw.settings },
+    settings: cleanSettings(raw.settings),
     tasks: raw.tasks ?? [],
     thoughts: raw.thoughts ?? [],
     history: raw.history ?? [],

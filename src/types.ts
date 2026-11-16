@@ -1,5 +1,9 @@
 export type AmbientKind = 'off' | 'rain' | 'fire' | 'cafe'
 
+export type IslandEdge = 'top' | 'left' | 'right'
+
+export type ThemeId = 'lamp' | 'light' | 'dark' | 'ink'
+
 export type Task = {
   id: string
   title: string
@@ -45,6 +49,8 @@ export type Settings = {
   chime: boolean
   ambient: AmbientKind
   notify: boolean
+  islandEdge: IslandEdge
+  theme: ThemeId
 }
 
 export type State = {

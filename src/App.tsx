@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import lampIcon from './assets/icon.jpg'
 import { unlockAudio } from './audio'
+import { applyEdge, applyTheme } from './look'
 import {
   WEEKDAYS,
   formatClock,
@@ -35,8 +36,32 @@ export default function App() {
 
 function Root() {
   const { state } = useStore()
-  if (!state.onboarded) return <Onboarding />
-  return <Desk />
+  const update = useUpdateOffer()
+
+  useEffect(() => {
+    applyTheme(state.settings.theme)
+    applyEdge(state.settings.islandEdge)
+  }, [state.settings.theme, state.settings.islandEdge])
+  return (
+    <>
+      {state.onboarded ? (
+        <Desk updateOpen={Boolean(update.offer)} dismissUpdate={update.dismiss} />
+      ) : (
+        <Onboarding />
+      )}
+      {update.offer && (
+        <UpdateCard
+          current={update.offer.current}
+          version={update.offer.version}
+          progress={update.progress}
+          error={update.error}
+          busy={update.busy}
+          onLater={update.dismiss}
+          onInstall={() => void update.install()}
+        />
+      )}
+    </>
+  )
 }
 
 function Onboarding() {
@@ -60,12 +85,19 @@ function Onboarding() {
   )
 }
 
-function Desk() {
+function Desk({
+  updateOpen,
+  dismissUpdate,
+}: {
+  updateOpen: boolean
+  dismissUpdate: () => void
+}) {
   const { state, remaining } = useStore()
   const session = state.session
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [journalOpen, setJournalOpen] = useState(false)
   const [journalDay, setJournalDay] = useState(() => todayKey())
+  const online = useOnlineCount()
   const running = session?.status === 'running'
   const paused = session?.status === 'paused'
   const done = session?.status === 'done'
@@ -92,8 +124,12 @@ function Desk() {
   }, [running, remaining, title])
 
   useShortcuts({
-    modalOpen: settingsOpen || journalOpen,
+    modalOpen: settingsOpen || journalOpen || updateOpen,
     closeModals: () => {
+      if (updateOpen) {
+        dismissUpdate()
+        return
+      }
       setSettingsOpen(false)
       setJournalOpen(false)
     },
@@ -121,6 +157,11 @@ function Desk() {
             <div className="top-meta">
               <div className="date">{formatDateRu()}</div>
               <div className="streak">{streakLabel(state.history)}</div>
+              {online != null && (
+                <div className="online" title="Только число. Случайный код, пока приложение открыто.">
+                  {onlineLabel(online)}
+                </div>
+              )}
             </div>
             <div className="top-actions">
               <button className="icon-btn" onClick={() => openJournal()} title="Дни работы">
@@ -153,7 +194,7 @@ function Desk() {
           <span className="kbd">N</span> новая · <span className="kbd">Пробел</span> лампа ·{' '}
           <span className="kbd">Enter</span> готово · <span className="kbd">Esc</span> отпустить
         </span>
-        <span>Данные остаются на этом компьютере</span>
+        <span>Задачи остаются на этом компьютере</span>
       </footer>
 
       {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
@@ -624,6 +665,118 @@ function CalendarIcon() {
   )
 }
 
+function useUpdateOffer() {
+  const [offer, setOffer] = useState<{ version: string; current: string } | null>(null)
+  const [progress, setProgress] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const api = window.seychas
+    if (!api?.checkUpdate) return
+    let alive = true
+    const stop = api.onUpdateProgress?.((ratio) => {
+      if (alive) setProgress(ratio)
+    })
+    api
+      .checkUpdate()
+      .then((result) => {
+        if (alive && result?.update) setOffer(result.update)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+      stop?.()
+    }
+  }, [])
+
+  const dismiss = useCallback(() => {
+    if (busy) return
+    setOffer(null)
+  }, [busy])
+
+  const install = useCallback(async () => {
+    if (!window.seychas?.installUpdate || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await window.seychas.installUpdate()
+      if (!result?.ok) {
+        setBusy(false)
+        setError(result?.message || 'Не получилось скачать обновление.')
+      }
+    } catch {
+      setBusy(false)
+      setError('Не получилось скачать обновление.')
+    }
+  }, [busy])
+
+  return { offer, progress, error, busy, dismiss, install }
+}
+
+function UpdateCard({
+  current,
+  version,
+  progress,
+  error,
+  busy,
+  onLater,
+  onInstall,
+}: {
+  current: string
+  version: string
+  progress: number | null
+  error: string | null
+  busy: boolean
+  onLater: () => void
+  onInstall: () => void
+}) {
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || busy) return
+      event.preventDefault()
+      event.stopPropagation()
+      onLater()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [busy, onLater])
+
+  const percent = progress != null && progress >= 0 ? Math.round(progress * 100) : null
+  return (
+    <div
+      className="overlay update-overlay"
+      role="dialog"
+      aria-labelledby="update-title"
+      onClick={() => {
+        if (!busy) onLater()
+      }}
+    >
+      <div className="card update-card" onClick={(event) => event.stopPropagation()}>
+        <h3 id="update-title">Есть новая версия</h3>
+        <p>
+          На GitHub вышла {version}. Сейчас у тебя {current}. Установщик скачается, откроется, и «Сейчас»
+          закроется.
+        </p>
+        {busy && percent != null && (
+          <div className="update-bar" aria-hidden="true">
+            <span style={{ width: `${percent}%` }} />
+          </div>
+        )}
+        {error && <p className="update-error">{error}</p>}
+        <div className="actions">
+          <button className="primary" disabled={busy} onClick={onInstall}>
+            {busy ? (percent == null ? 'Скачиваю…' : `Скачиваю ${percent}%`) : 'Обновить'}
+          </button>
+          <button className="ghost" disabled={busy} onClick={onLater}>
+            Позже
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FinishedCard() {
   const { state, dispatch } = useStore()
   const minutes = breakMinutes(state)
@@ -696,6 +849,47 @@ function Settings({ onClose }: { onClose: () => void }) {
       <div className="card settings-card" onClick={(e) => e.stopPropagation()}>
         <h3>Настройки</h3>
         <div className="field">
+          <span>Островок</span>
+          <div className="presets">
+            {(
+              [
+                ['top', 'Сверху'],
+                ['left', 'Слева'],
+                ['right', 'Справа'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                className={`chip ${s.islandEdge === id ? 'on' : ''}`}
+                onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { islandEdge: id } })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <span>Тема</span>
+          <div className="presets">
+            {(
+              [
+                ['lamp', 'Лампа'],
+                ['light', 'Светлая'],
+                ['dark', 'Тёмная'],
+                ['ink', 'Чернила'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                className={`chip ${s.theme === id ? 'on' : ''}`}
+                onClick={() => dispatch({ type: 'UPDATE_SETTINGS', patch: { theme: id } })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
           <span>Длина круга</span>
           <div className="presets">
             {[15, 25, 50, 90].map((m) => (
@@ -753,6 +947,34 @@ function Settings({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   )
+}
+
+function useOnlineCount() {
+  const [online, setOnline] = useState<number | null>(null)
+
+  useEffect(() => {
+    const api = window.seychas
+    if (!api?.presence) return
+    let alive = true
+    const apply = (count: number | null) => {
+      if (alive && typeof count === 'number' && count > 0) setOnline(count)
+    }
+    api
+      .presence()
+      .then(apply)
+      .catch(() => {})
+    const stop = api.onPresence?.(apply)
+    return () => {
+      alive = false
+      stop?.()
+    }
+  }, [])
+
+  return online
+}
+
+function onlineLabel(count: number) {
+  return `${count} ${plural(count, 'человек', 'человека', 'человек')} сейчас`
 }
 
 function streakLabel(history: DayStat[]) {
