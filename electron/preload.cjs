@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('seychas', {
   covered: () => ipcRenderer.invoke('seychas:covered'),
   pointerInside: () => ipcRenderer.invoke('seychas:pointer-inside'),
   beginDrag: () => ipcRenderer.invoke('seychas:island-drag-start'),
+  completeTask: () => ipcRenderer.send('seychas:task-done'),
   onDragging: (callback) => {
     const listener = (_event, dragging) => callback(Boolean(dragging))
     ipcRenderer.on('seychas:island-dragging', listener)
@@ -23,6 +24,11 @@ contextBridge.exposeInMainWorld('seychas', {
     const listener = (_event, covered) => callback(Boolean(covered))
     ipcRenderer.on('seychas:island-covered', listener)
     return () => ipcRenderer.removeListener('seychas:island-covered', listener)
+  },
+  onTaskDone: (callback) => {
+    const listener = (_event, persist) => callback(Boolean(persist))
+    ipcRenderer.on('seychas:task-done', listener)
+    return () => ipcRenderer.removeListener('seychas:task-done', listener)
   },
   checkUpdate: () => ipcRenderer.invoke('seychas:update-check'),
   installUpdate: () => ipcRenderer.invoke('seychas:update-install'),

@@ -73,6 +73,7 @@ export type Action =
   | { type: 'ADD_TASK'; title: string }
   | { type: 'REMOVE_TASK'; id: string }
   | { type: 'TOGGLE_DONE'; id: string }
+  | { type: 'COMPLETE_CURRENT' }
   | { type: 'SELECT_TASK'; id: string | null }
   | { type: 'SET_INTENTION'; value: string }
   | { type: 'START_SESSION'; kind: SessionKind }

@@ -10,7 +10,7 @@ const ISLAND_W = 292
 const ISLAND_H = 48
 const ISLAND_OPEN_W = 340
 const ISLAND_OPEN_MIN = 120
-const ISLAND_OPEN_MAX = 220
+const ISLAND_OPEN_MAX = 260
 const SIDE_OPEN_W = 280
 const SIDE_OPEN_MIN = 168
 const SIDE_OPEN_MAX = 300
@@ -485,7 +485,7 @@ function createTray() {
   const image = loadTrayImage()
   if (image.isEmpty()) return
   tray = new Tray(image)
-  tray.setToolTip('Сейчас')
+  tray.setToolTip('Лампа')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Открыть', click: () => restoreMain() },
@@ -521,7 +521,7 @@ function createIsland() {
     hasShadow: false,
     thickFrame: false,
     backgroundColor: '#00000000',
-    title: 'Сейчас',
+    title: 'Лампа',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -556,7 +556,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 700,
     backgroundColor: '#120e0b',
-    title: 'Сейчас',
+    title: 'Лампа',
     icon: iconFile(),
     autoHideMenuBar: true,
     show: false,
@@ -604,6 +604,15 @@ function createWindow() {
 
 ipcMain.on('seychas:restore', () => {
   restoreMain()
+})
+
+ipcMain.on('seychas:task-done', () => {
+  const mainAlive = Boolean(win && !win.isDestroyed())
+  if (mainAlive) {
+    win.webContents.send('seychas:task-done', false)
+    return
+  }
+  if (island && !island.isDestroyed()) island.webContents.send('seychas:task-done', true)
 })
 
 ipcMain.on('seychas:island-expanded', (_event, expanded, height) => {

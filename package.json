@@ -1,8 +1,8 @@
 {
   "name": "seychas",
   "private": true,
-  "version": "1.3.0",
-  "description": "Сейчас — фокус на одной задаче",
+  "version": "1.4.0",
+  "description": "Лампа — фокус на одной задаче",
   "author": "Сейчас",
   "type": "module",
   "main": "electron/main.cjs",
@@ -40,7 +40,7 @@
   "build": {
     "appId": "app.seychas.desktop",
     "productName": "Seychas",
-    "copyright": "Сейчас",
+    "copyright": "Лампа",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -78,8 +78,8 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "shortcutName": "Сейчас",
-      "uninstallDisplayName": "Сейчас",
+      "shortcutName": "Лампа",
+      "uninstallDisplayName": "Лампа",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "installerIcon": "build/icon.ico",

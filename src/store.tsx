@@ -113,6 +113,50 @@ function finishSession(state: State, now: number): State {
   return next
 }
 
+function currentTaskId(state: State): string | null {
+  const active = state.tasks.find((item) => item.id === state.activeTaskId)
+  if (active && !active.done) return active.id
+  const session = state.session
+  if (session?.kind === 'focus' && session.taskId) {
+    const task = state.tasks.find((item) => item.id === session.taskId)
+    if (task && !task.done) return task.id
+  }
+  return null
+}
+
+function nextOpenTaskId(tasks: Task[], currentId: string): string | null {
+  const index = tasks.findIndex((item) => item.id === currentId)
+  for (let i = index + 1; i < tasks.length; i += 1) {
+    if (!tasks[i].done) return tasks[i].id
+  }
+  for (let i = 0; i < index; i += 1) {
+    if (!tasks[i].done) return tasks[i].id
+  }
+  return null
+}
+
+export function completeCurrentTask(state: State, now = Date.now()): State {
+  const currentId = currentTaskId(state)
+  if (!currentId) return state
+  const nextId = nextOpenTaskId(state.tasks, currentId)
+  let tasks = state.tasks.map((item) =>
+    item.id === currentId ? { ...item, done: true, completedAt: now } : item,
+  )
+  let history = creditDay(state.history, todayKey(), 0, 0, 1)
+  let session = state.session
+  if (session?.kind === 'focus' && session.taskId === currentId && session.status !== 'done') {
+    const elapsed = getElapsed(session, now)
+    if (elapsed >= MIN_CREDIT_MS) {
+      tasks = tasks.map((item) => (item.id === currentId ? { ...item, focusedMs: item.focusedMs + elapsed } : item))
+      history = creditDay(history, todayKey(), elapsed, 0, 0)
+      session = { ...session, taskId: nextId, elapsedMs: 0, runningSince: session.status === 'running' ? now : null }
+    } else {
+      session = { ...session, taskId: nextId }
+    }
+  }
+  return { ...state, tasks, history, activeTaskId: nextId, session }
+}
+
 function stopSession(state: State, now: number): State {
   const session = state.session
   if (!session) return state
@@ -207,6 +251,8 @@ function reducer(state: State, action: Action): State {
       }
       return { ...state, tasks, history, activeTaskId }
     }
+    case 'COMPLETE_CURRENT':
+      return completeCurrentTask(state, now)
     case 'SELECT_TASK':
       return { ...state, activeTaskId: action.id }
     case 'SET_INTENTION':

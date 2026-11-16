@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import lampIcon from './assets/icon.jpg'
 import { unlockAudio } from './audio'
 import { applyEdge, applyTheme } from './look'
@@ -49,6 +49,12 @@ function Root() {
       dispatch({ type: 'UPDATE_SETTINGS', patch: { islandEdge: edge } })
     })
   }, [dispatch])
+
+  useEffect(() => {
+    return window.seychas?.onTaskDone?.(() => {
+      dispatch({ type: 'COMPLETE_CURRENT' })
+    })
+  }, [dispatch])
   return (
     <>
       {state.onboarded ? (
@@ -76,7 +82,7 @@ function Onboarding() {
   return (
     <div className="onboarding">
       <img src={lampIcon} alt="Лампа" />
-      <h1>сейчас</h1>
+      <h1>Лампа</h1>
       <p className="rule">В каждый момент — только одна задача.</p>
       <p className="sub">Поставь её на стол, зажги лампу и работай, пока горит свет.</p>
       <button
@@ -126,7 +132,7 @@ function Desk({
     if (running) {
       document.title = `${formatClock(remaining)} · ${title}`
     } else {
-      document.title = 'Сейчас'
+      document.title = 'Лампа'
     }
   }, [running, remaining, title])
 
@@ -156,7 +162,7 @@ function Desk({
           <div className="brand">
             <img src={lampIcon} alt="" />
             <div>
-              <h1>сейчас</h1>
+              <h1>Лампа</h1>
               <p>одна задача</p>
             </div>
           </div>
@@ -358,10 +364,33 @@ function Stage() {
           ? 'Фокус'
           : 'Готов'
 
-  function startFocus() {
+  const ringAction =
+    session?.status === 'running' ? 'pause' : session?.status === 'paused' ? 'resume' : session ? null : 'start'
+
+  function lightRing(event: MouseEvent<HTMLButtonElement>) {
+    const button = event.currentTarget
+    const burst = button.querySelector('.ring-burst')
+    button.classList.remove('is-pressed')
+    burst?.classList.remove('is-on')
+    void button.offsetWidth
+    button.classList.add('is-pressed')
+    burst?.classList.add('is-on')
     unlockAudio()
-    dispatch({ type: 'START_SESSION', kind: 'focus' })
+    if (ringAction === 'start') dispatch({ type: 'START_SESSION', kind: 'focus' })
+    else if (ringAction === 'pause') dispatch({ type: 'PAUSE' })
+    else if (ringAction === 'resume') dispatch({ type: 'RESUME' })
   }
+
+  const ring = (
+    <>
+      <TimerRing progress={progress} />
+      <div className="ring-face">
+        <div className="flame" />
+        <div className="time">{formatClock(session ? remaining : duration)}</div>
+        <div className="kind">{label}</div>
+      </div>
+    </>
+  )
 
   return (
     <section className="panel stage">
@@ -384,12 +413,25 @@ function Stage() {
       </div>
 
       <div className="ring-wrap">
-        <TimerRing progress={progress} />
-        <div className="ring-face">
-          <div className="flame" />
-          <div className="time">{formatClock(session ? remaining : duration)}</div>
-          <div className="kind">{label}</div>
-        </div>
+        {ringAction ? (
+          <button
+            type="button"
+            className="ring-hit"
+            aria-label={
+              ringAction === 'pause'
+                ? 'Пауза'
+                : ringAction === 'resume'
+                  ? 'Продолжить'
+                  : `Зажечь лампу, ${state.settings.focusMin} минут`
+            }
+            onClick={lightRing}
+          >
+            {ring}
+            <span className="ring-burst" aria-hidden="true" />
+          </button>
+        ) : (
+          <div className="ring-hit">{ring}</div>
+        )}
       </div>
 
       <p className="active-title">
@@ -404,30 +446,10 @@ function Stage() {
       </p>
 
       <div className="actions">
-        {!session && (
-          <button className="primary" onClick={startFocus}>
-            Зажечь лампу · {state.settings.focusMin} мин
+        {(session?.status === 'running' || session?.status === 'paused') && (
+          <button className="ghost" onClick={() => dispatch({ type: 'STOP' })}>
+            Сбросить
           </button>
-        )}
-        {session?.status === 'running' && (
-          <>
-            <button className="primary" onClick={() => dispatch({ type: 'PAUSE' })}>
-              Пауза
-            </button>
-            <button className="ghost" onClick={() => dispatch({ type: 'STOP' })}>
-              Сбросить
-            </button>
-          </>
-        )}
-        {session?.status === 'paused' && (
-          <>
-            <button className="primary" onClick={() => dispatch({ type: 'RESUME' })}>
-              Продолжить
-            </button>
-            <button className="ghost" onClick={() => dispatch({ type: 'STOP' })}>
-              Сбросить
-            </button>
-          </>
         )}
         {active && !active.done && (
           <button className="ghost" onClick={() => dispatch({ type: 'TOGGLE_DONE', id: active.id })}>
@@ -475,27 +497,35 @@ function Stage() {
 function TimerRing({ progress }: { progress: number }) {
   const r = 108
   const c = 2 * Math.PI * r
-  const offset = c * (1 - progress)
+  const amount = Math.min(1, Math.max(0, progress))
+  const offset = c * (1 - amount)
+  const visible = amount > 0.001
   return (
-    <svg viewBox="0 0 240 240">
-      <defs>
-        <linearGradient id="copper" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#e8a06a" />
-          <stop offset="1" stopColor="#c4784a" />
-        </linearGradient>
-      </defs>
-      <circle cx="120" cy="120" r={r} stroke="rgba(232,201,160,.16)" strokeWidth="1.6" fill="none" />
+    <svg viewBox="0 0 240 240" className="timer-ring">
+      <circle className="ring-track" cx="120" cy="120" r={r} fill="none" />
       <circle
+        className="ring-glow"
         cx="120"
         cy="120"
         r={r}
-        stroke="url(#copper)"
-        strokeWidth="3.2"
         fill="none"
         strokeDasharray={c}
         strokeDashoffset={offset}
         strokeLinecap="round"
         transform="rotate(-90 120 120)"
+        opacity={visible ? 0.4 : 0}
+      />
+      <circle
+        className="ring-arc"
+        cx="120"
+        cy="120"
+        r={r}
+        fill="none"
+        strokeDasharray={c}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        transform="rotate(-90 120 120)"
+        opacity={visible ? 1 : 0}
       />
     </svg>
   )
@@ -840,7 +870,7 @@ function UpdateCard({
       <div className="card update-card" onClick={(event) => event.stopPropagation()}>
         <h3 id="update-title">Есть новая версия</h3>
         <p>
-          На GitHub вышла {version}. Сейчас у тебя {current}. Установщик скачается, откроется, и «Сейчас»
+          На GitHub вышла {version}. Сейчас у тебя {current}. Установщик скачается, откроется, и «Лампа»
           закроется.
         </p>
         {busy && percent != null && (
@@ -1031,6 +1061,7 @@ function Settings({ onClose }: { onClose: () => void }) {
             Закрыть
           </button>
         </div>
+        <p className="settings-credit">by J0shGG</p>
       </div>
     </div>
   )

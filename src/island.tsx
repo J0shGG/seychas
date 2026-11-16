@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { formatClock, formatMinutes, plural, todayKey } from './format'
 import { applyEdge, applyTheme } from './look'
-import { STORAGE_KEY, getElapsed } from './store'
-import type { IslandEdge, State } from './types'
+import { STORAGE_KEY, completeCurrentTask, getElapsed } from './store'
+import type { IslandEdge, State, Task } from './types'
 
 function readState(): State | null {
   try {
@@ -33,12 +33,25 @@ function clockTime(ms: number): string {
   return new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
 
-function expandedHeight(hasTitle: boolean, hasIntention: boolean, hasProgress: boolean): number {
+function expandedHeight(hasTitle: boolean, hasIntention: boolean, hasProgress: boolean, hasDone: boolean): number {
   let height = 124
   if (hasTitle) height += 36
   if (hasIntention) height += 22
   if (hasProgress) height += 16
+  if (hasDone) height += 40
   return height
+}
+
+function currentTaskOf(state: State | null): Task | null {
+  if (!state) return null
+  const active = state.tasks.find((item) => item.id === state.activeTaskId)
+  if (active && !active.done) return active
+  const session = state.session
+  if (session?.kind === 'focus' && session.taskId) {
+    const task = state.tasks.find((item) => item.id === session.taskId)
+    if (task && !task.done) return task
+  }
+  return null
 }
 
 export function Island() {
@@ -54,6 +67,7 @@ export function Island() {
   const draggingRef = useRef(false)
   const swallowClick = useRef(false)
   const stopPointer = useRef<(() => void) | null>(null)
+  const completing = useRef(false)
   const storedEdge: IslandEdge = state?.settings?.islandEdge === 'left' || state?.settings?.islandEdge === 'right'
     ? state.settings.islandEdge
     : 'top'
@@ -85,6 +99,20 @@ export function Island() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
       } catch {
         /* the desk window stores the edge when it is open */
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    return window.seychas?.onTaskDone?.((persist) => {
+      if (!persist) return
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY)
+        if (!raw) return
+        const parsed = JSON.parse(raw) as State
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(completeCurrentTask(parsed)))
+      } catch {
+        /* the desk window stores the task when it is open */
       }
     })
   }, [])
@@ -131,16 +159,14 @@ export function Island() {
   const paused = session?.status === 'paused'
   const done = session?.status === 'done'
   const intention = state?.intention?.trim() ?? ''
+  const currentTask = currentTaskOf(state)
 
-  let label = 'Сейчас'
+  let label = currentTask?.title || 'Лампа'
   if (session?.status === 'done') label = session.kind === 'break' ? 'Перерыв окончен' : 'Круг окончен'
   else if (session?.kind === 'break') label = 'Перерыв'
-  else if (session) {
-    label = state?.tasks.find((task) => task.id === session.taskId)?.title || 'Фокус'
-  }
 
   const clock = session ? formatClock(done ? 0 : remaining) : ''
-  const title = session && label !== 'Перерыв' && label !== 'Круг окончен' && label !== 'Перерыв окончен' ? label : ''
+  const title = currentTask?.title || ''
   let status = ''
   let pace = 'Нет активного круга'
   if (done && session) {
@@ -159,7 +185,8 @@ export function Island() {
     (session?.kind === 'focus' && !done ? elapsed : 0)
   const cycles = state?.cyclesToday ?? 0
   const todayLine = `Сегодня ${formatMinutes(todayMs)} · ${cycles} ${plural(cycles, 'круг', 'круга', 'кругов')}`
-  const height = expandedHeight(Boolean(title), Boolean(intention), Boolean(session && !done))
+  const shownTitle = title
+  const height = expandedHeight(Boolean(shownTitle), Boolean(intention), Boolean(session && !done), Boolean(currentTask))
 
   stopHover.current = () => {
     hoverGen.current += 1
@@ -236,7 +263,18 @@ export function Island() {
     .filter(Boolean)
     .join(' ')
 
-  function onPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+  function completeTask(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (completing.current || !currentTask) return
+    completing.current = true
+    window.setTimeout(() => {
+      completing.current = false
+    }, 400)
+    window.seychas?.completeTask?.()
+  }
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return
     stopPointer.current?.()
     const startX = event.screenX
@@ -275,8 +313,7 @@ export function Island() {
   }
 
   return (
-    <button
-      type="button"
+    <div
       className={cls}
       onMouseEnter={expand}
       onMouseLeave={collapse}
@@ -288,32 +325,42 @@ export function Island() {
         }
         window.seychas?.restore()
       }}
-      aria-label={clock ? `${label}, ${clock}. ${pace}. Открыть приложение` : 'Открыть Сейчас'}
     >
       <span className="island-top">
         <span className="island-dot" aria-hidden="true" />
         {clock ? (
           <span className="island-time">{clock}</span>
         ) : open || rail ? (
-          <span className="island-time">Сейчас</span>
+          <span className="island-time">Лампа</span>
         ) : null}
         <span className="island-label">{label}</span>
         {status ? <span className="island-state">{status}</span> : null}
       </span>
       <span className="island-body" aria-hidden={open ? undefined : true}>
-        {title ? <span className="island-title">{title}</span> : null}
+        {shownTitle ? <span className="island-title">{shownTitle}</span> : null}
         <span className="island-more">
           <span>{pace}</span>
           <span>{todayLine}</span>
           {intention ? <span className="island-intent">{intention}</span> : null}
         </span>
+        {currentTask ? (
+          <button
+            type="button"
+            className="island-done"
+            aria-label={`Задача «${currentTask.title}» выполнена`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={completeTask}
+          >
+            Задача выполнена
+          </button>
+        ) : null}
       </span>
       {session && !done ? (
         <span className="island-progress" aria-hidden="true">
           <span style={{ transform: rail ? `scaleY(${progress})` : `scaleX(${progress})` }} />
         </span>
       ) : null}
-    </button>
+    </div>
   )
 }
 
