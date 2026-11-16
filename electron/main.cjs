@@ -1,7 +1,7 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
-const { fullscreenCover, liftIsland, shapeIsland } = require('./frame.cjs')
+const { fullscreenCover, liftIsland, setSmoothTimers, shapeIsland } = require('./frame.cjs')
 const { checkForUpdate, downloadUpdate } = require('./update.cjs')
 const { startPresence } = require('./presence.cjs')
 
@@ -39,6 +39,7 @@ let islandOpenHeight = 168
 let islandRadius = ISLAND_H / 2
 let islandEdge = 'top'
 let islandAnim = null
+let islandPainted = ''
 let islandCovered = false
 let coverMisses = 0
 let coverTimer = null
@@ -46,6 +47,7 @@ let quitting = false
 let latestCount = null
 let stopPresence = null
 const ISLAND_ANIM_MS = 320
+const ISLAND_FRAME_MS = 1000 / 60
 
 function iconFile() {
   if (app.isPackaged) return undefined
@@ -76,25 +78,31 @@ function islandSide() {
   return islandEdge === 'left' || islandEdge === 'right'
 }
 
-function islandBox() {
+function islandBoxFor(expanded) {
   if (islandCovered) return { width: ISLAND_H, height: ISLAND_H, radius: ISLAND_H / 2 }
   if (!islandSide()) {
-    if (islandExpanded) {
+    if (expanded) {
       const height = Math.max(ISLAND_OPEN_MIN, Math.min(ISLAND_OPEN_MAX, Math.round(islandOpenHeight)))
       return { width: ISLAND_OPEN_W, height, radius: 22 }
     }
     return { width: ISLAND_W, height: ISLAND_H, radius: ISLAND_H / 2 }
   }
-  if (islandExpanded) {
-    const height = Math.max(SIDE_OPEN_MIN, Math.min(SIDE_OPEN_MAX, Math.round(islandOpenHeight)))
+  if (expanded) {
+    // Stay at least as tall as the collapsed rail, so the top and bottom edges do not slide off the cursor.
+    const height = Math.min(SIDE_OPEN_MAX, Math.max(ISLAND_W, Math.round(islandOpenHeight)))
     return { width: SIDE_OPEN_W, height, radius: 22 }
   }
   return { width: ISLAND_H, height: ISLAND_W, radius: ISLAND_H / 2 }
 }
 
+function islandBox() {
+  return islandBoxFor(islandExpanded)
+}
+
 function readCovered() {
   try {
-    return Boolean(fullscreenCover())
+    const hwnd = island && !island.isDestroyed() ? island.getNativeWindowHandle().readBigUInt64LE(0) : null
+    return Boolean(fullscreenCover(hwnd))
   } catch (error) {
     console.error('fullscreen watch', error)
     return islandCovered
@@ -136,10 +144,21 @@ function refreshCovered() {
   applyCovered(false)
 }
 
+let reshapeTimer = null
+
+function scheduleReshape() {
+  if (reshapeTimer) return
+  reshapeTimer = setTimeout(() => {
+    reshapeTimer = null
+    if (!island || island.isDestroyed()) return
+    shapeIsland(island, islandRadius, true)
+  }, 32)
+}
+
 function cancelIslandAnim() {
-  if (!islandAnim) return
-  clearTimeout(islandAnim)
+  if (islandAnim) clearTimeout(islandAnim)
   islandAnim = null
+  setSmoothTimers(false)
 }
 
 function islandTarget() {
@@ -148,6 +167,10 @@ function islandTarget() {
     : screen.getCursorScreenPoint()
   const { workArea } = screen.getDisplayNearestPoint(point)
   const box = islandBox()
+  return placeBox(box, workArea)
+}
+
+function placeBox(box, workArea) {
   const margin = 10
   let width = box.width
   let height = box.height
@@ -169,9 +192,26 @@ function islandTarget() {
   return { x, y, width, height, radius: box.radius }
 }
 
+function pointerInIsland() {
+  if (!island || island.isDestroyed() || !island.isVisible() || islandCovered) return false
+  const cursor = screen.getCursorScreenPoint()
+  const { workArea } = screen.getDisplayNearestPoint(cursor)
+  const collapsed = placeBox(islandBoxFor(false), workArea)
+  const expanded = placeBox(islandBoxFor(true), workArea)
+  const pad = 12
+  const left = Math.min(collapsed.x, expanded.x) - pad
+  const top = Math.min(collapsed.y, expanded.y) - pad
+  const right = Math.max(collapsed.x + collapsed.width, expanded.x + expanded.width) + pad
+  const bottom = Math.max(collapsed.y + collapsed.height, expanded.y + expanded.height) + pad
+  return cursor.x >= left && cursor.x < right && cursor.y >= top && cursor.y < bottom
+}
+
 function applyIslandFrame(frame) {
   if (!island || island.isDestroyed()) return
   islandRadius = frame.radius
+  const key = `${frame.x}|${frame.y}|${frame.width}|${frame.height}|${Math.round(frame.radius * 2)}`
+  if (key === islandPainted) return
+  islandPainted = key
   island.setBounds({ x: frame.x, y: frame.y, width: frame.width, height: frame.height })
   shapeIsland(island, frame.radius)
 }
@@ -199,11 +239,17 @@ function placeIsland(animated) {
     return
   }
   cancelIslandAnim()
-  const start = Date.now()
+  const start = performance.now()
+  let frameIndex = 0
+  setSmoothTimers(true)
   const step = () => {
     islandAnim = null
-    if (!island || island.isDestroyed() || !islandWanted) return
-    const t = Math.min(1, (Date.now() - start) / ISLAND_ANIM_MS)
+    if (!island || island.isDestroyed() || !islandWanted) {
+      setSmoothTimers(false)
+      return
+    }
+    const now = performance.now()
+    const t = Math.min(1, (now - start) / ISLAND_ANIM_MS)
     const e = 1 - (1 - t) ** 3
     applyIslandFrame({
       x: Math.round(from.x + (to.x - from.x) * e),
@@ -212,7 +258,18 @@ function placeIsland(animated) {
       height: Math.max(1, Math.round(from.height + (to.height - from.height) * e)),
       radius: from.radius + (to.radius - from.radius) * e,
     })
-    if (t < 1) islandAnim = setTimeout(step, 16)
+    if (t >= 1) {
+      setSmoothTimers(false)
+      scheduleReshape()
+      return
+    }
+    frameIndex += 1
+    let due = start + frameIndex * ISLAND_FRAME_MS
+    if (performance.now() - due > ISLAND_FRAME_MS) {
+      frameIndex = Math.ceil((performance.now() - start) / ISLAND_FRAME_MS)
+      due = start + frameIndex * ISLAND_FRAME_MS
+    }
+    islandAnim = setTimeout(step, Math.max(0, due - performance.now()))
   }
   step()
 }
@@ -238,6 +295,7 @@ function hideIsland() {
   islandCovered = false
   coverMisses = 0
   islandRadius = ISLAND_H / 2
+  islandPainted = ''
   cancelIslandAnim()
   if (!island || island.isDestroyed() || !island.isVisible()) return
   island.hide()
@@ -322,6 +380,7 @@ function createIsland() {
   island.setAlwaysOnTop(true, 'floating')
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   island.webContents.setBackgroundThrottling(false)
+  island.on('resize', () => scheduleReshape())
 
   island.once('ready-to-show', () => {
     islandReady = true
@@ -396,11 +455,16 @@ ipcMain.on('seychas:restore', () => {
 
 ipcMain.on('seychas:island-expanded', (_event, expanded, height) => {
   if (islandCovered && expanded) return
-  islandExpanded = Boolean(expanded)
-  if (Number.isFinite(height)) islandOpenHeight = height
+  const next = Boolean(expanded)
+  const nextHeight = Number.isFinite(height) ? height : islandOpenHeight
+  if (next === islandExpanded && Math.round(nextHeight) === Math.round(islandOpenHeight)) return
+  islandExpanded = next
+  islandOpenHeight = nextHeight
   if (!islandWanted || !island || island.isDestroyed() || !island.isVisible()) return
   placeIsland(true)
 })
+
+ipcMain.handle('seychas:pointer-inside', () => pointerInIsland())
 
 ipcMain.handle('seychas:covered', () => islandCovered)
 
@@ -476,6 +540,7 @@ if (!locked) {
     quitting = true
   })
   app.on('will-quit', () => {
+    cancelIslandAnim()
     stopPresence?.()
     stopPresence = null
     if (coverTimer) clearInterval(coverTimer)

@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('seychas', {
   setEdge: (edge) => ipcRenderer.send('seychas:island-edge', edge),
   setTheme: (theme) => ipcRenderer.send('seychas:theme', theme),
   covered: () => ipcRenderer.invoke('seychas:covered'),
+  pointerInside: () => ipcRenderer.invoke('seychas:pointer-inside'),
   onCovered: (callback) => {
     const listener = (_event, covered) => callback(Boolean(covered))
     ipcRenderer.on('seychas:island-covered', listener)

@@ -9,6 +9,7 @@ declare global {
       setEdge?: (edge: 'top' | 'left' | 'right') => void
       setTheme?: (theme: 'lamp' | 'light' | 'dark' | 'ink') => void
       covered?: () => Promise<boolean>
+      pointerInside?: () => Promise<boolean>
       onCovered?: (callback: (covered: boolean) => void) => () => void
       checkUpdate?: () => Promise<{ update: { version: string; current: string } | null }>
       installUpdate?: () => Promise<{ ok: boolean; message?: string }>

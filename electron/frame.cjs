@@ -4,6 +4,7 @@ const { screen } = require('electron')
 const gdi32 = koffi.load('gdi32.dll')
 const user32 = koffi.load('user32.dll')
 const dwmapi = koffi.load('dwmapi.dll')
+const winmm = koffi.load('winmm.dll')
 
 const CreateRoundRectRgn = gdi32.func(
   'void * __stdcall CreateRoundRectRgn(int left, int top, int right, int bottom, int widthEllipse, int heightEllipse)',
@@ -32,6 +33,7 @@ const GetClientRect = user32.func('int __stdcall GetClientRect(void *hwnd, void 
 const ClientToScreen = user32.func('int __stdcall ClientToScreen(void *hwnd, void *point)')
 const IsWindowVisible = user32.func('int __stdcall IsWindowVisible(void *hwnd)')
 const IsIconic = user32.func('int __stdcall IsIconic(void *hwnd)')
+const IsZoomed = user32.func('int __stdcall IsZoomed(void *hwnd)')
 const GetWindowThreadProcessId = user32.func('uint32 __stdcall GetWindowThreadProcessId(void *hwnd, void *pid)')
 const GetClassNameW = user32.func('int __stdcall GetClassNameW(void *hwnd, void *name, int max)')
 const GetWindowLongPtrW = user32.func('intptr __stdcall GetWindowLongPtrW(void *hwnd, int index)')
@@ -44,6 +46,21 @@ const DwmGetWindowAttribute = dwmapi.func(
   'int __stdcall DwmGetWindowAttribute(void *hwnd, uint attribute, void *value, uint size)',
 )
 const SHQueryUserNotificationState = shell32.func('long __stdcall SHQueryUserNotificationState(void *state)')
+const timeBeginPeriod = winmm.func('uint32 __stdcall timeBeginPeriod(uint32 period)')
+const timeEndPeriod = winmm.func('uint32 __stdcall timeEndPeriod(uint32 period)')
+
+let smoothTimers = false
+let styledHwnd = 0n
+let regionKey = ''
+
+// Windows timers normally wake every 15.6ms, so setTimeout(16) lands near 30fps.
+function setSmoothTimers(on) {
+  if (process.platform !== 'win32') return
+  const next = Boolean(on)
+  if (next === smoothTimers) return
+  const result = next ? timeBeginPeriod(1) : timeEndPeriod(1)
+  if (result === 0) smoothTimers = next
+}
 
 // Desktop and shell hosts are the size of the screen, but they are not apps.
 const SHELL_CLASSES = new Set([
@@ -55,7 +72,6 @@ const SHELL_CLASSES = new Set([
   'CEF-OSC-WIDGET',
 ])
 const WS_EX_TRANSPARENT = 0x20n
-const WS_EX_NOACTIVATE = 0x08000000n
 const DWMWA_EXTENDED_FRAME_BOUNDS = 9
 const QUNS_RUNNING_D3D_FULL_SCREEN = 3
 const QUNS_PRESENTATION_MODE = 4
@@ -135,20 +151,11 @@ function monitorAreas(hwnd) {
   return { screen: read(4), work: read(20) }
 }
 
-function windowStyle(hwnd) {
-  try {
-    return BigInt(GetWindowLongPtrW(hwnd, -16))
-  } catch {
-    return 0n
-  }
-}
-
 function coversMonitor(rect, monitor) {
   if (!rect || !monitor) return false
   const width = monitor.right - monitor.left
   const height = monitor.bottom - monitor.top
-  // Keep this under a taskbar, so a maximized window does not count.
-  const tolX = Math.min(32, Math.max(16, Math.round(width * 0.015)))
+  const tolX = Math.min(48, Math.max(16, Math.round(width * 0.02)))
   const tolY = Math.min(32, Math.max(16, Math.round(height * 0.015)))
   return (
     rect.left <= monitor.left + tolX &&
@@ -165,37 +172,58 @@ function gameOrPresentation() {
   return state === QUNS_RUNNING_D3D_FULL_SCREEN || state === QUNS_PRESENTATION_MODE
 }
 
-function windowCoversItsMonitor(hwnd) {
+function sameScreen(hwnd, other) {
+  if (!other) return true
+  const a = monitorAreas(hwnd)
+  const b = monitorAreas(other)
+  if (!a || !b) return false
+  return (
+    a.screen.left === b.screen.left &&
+    a.screen.top === b.screen.top &&
+    a.screen.right === b.screen.right &&
+    a.screen.bottom === b.screen.bottom
+  )
+}
+
+function windowCoversItsMonitor(hwnd, islandHwnd) {
   if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || windowPid(hwnd) === process.pid || isCloaked(hwnd)) return false
-  const style = exStyle(hwnd)
-  if (style & WS_EX_TRANSPARENT || style & WS_EX_NOACTIVATE) return false
+  if (exStyle(hwnd) & WS_EX_TRANSPARENT) return false
   const name = windowClass(hwnd)
   if (!name || SHELL_CLASSES.has(name)) return false
+  if (!sameScreen(hwnd, islandHwnd)) return false
   const areas = monitorAreas(hwnd)
   if (!areas) return false
   const rects = [windowRect(hwnd), extendedFrame(hwnd), clientRect(hwnd)]
   if (rects.some((rect) => coversMonitor(rect, areas.screen))) return true
-  // Borderless players often cover only the work area and leave the taskbar.
-  const borderless = (windowStyle(hwnd) & 0x00c00000n) === 0n
-  return borderless && rects.some((rect) => coversMonitor(rect, areas.work))
+  // Maximized apps stop at the taskbar, so the full monitor test misses them.
+  if (IsZoomed(hwnd)) return true
+  return rects.some((rect) => coversMonitor(rect, areas.work))
 }
 
-// Any real app that covers its monitor counts, even when another window has focus.
-function fullscreenCover() {
+let coverFound = null
+let coverIsland = null
+
+function onCoverEnum(hwnd) {
+  if (coverFound) return 0
+  try {
+    if (windowCoversItsMonitor(hwnd, coverIsland)) coverFound = windowClass(hwnd) || 'window'
+  } catch {
+    // The window can close while the list is walking.
+  }
+  return coverFound ? 0 : 1
+}
+
+const onCoverEnumPtr = koffi.register(onCoverEnum, koffi.pointer(EnumWindowsProc))
+
+// A real app that fills this monitor counts, even when another window has focus.
+function fullscreenCover(islandHwnd) {
   if (process.platform !== 'win32') return null
   try {
     if (gameOrPresentation()) return 'fullscreen'
-    let found = null
-    EnumWindows((hwnd) => {
-      if (found) return 1
-      try {
-        if (windowCoversItsMonitor(hwnd)) found = windowClass(hwnd) || 'window'
-      } catch {
-        // The window can close while the list is walking.
-      }
-      return 1
-    }, 0)
-    return found
+    coverFound = null
+    coverIsland = islandHwnd || null
+    EnumWindows(onCoverEnumPtr, 0)
+    return coverFound
   } catch {
     return null
   }
@@ -211,35 +239,44 @@ function liftIsland(win) {
   }
 }
 
-function shapeIsland(win, radiusDip) {
+function shapeIsland(win, radiusDip, force) {
   if (process.platform !== 'win32' || !win || win.isDestroyed()) return null
   try {
-    return shapeIslandNow(win, radiusDip)
+    return shapeIslandNow(win, radiusDip, Boolean(force))
   } catch (error) {
     console.error('island shape', error)
     return { error: String(error) }
   }
 }
 
-function shapeIslandNow(win, radiusDip) {
+function shapeIslandNow(win, radiusDip, force) {
   const hwnd = win.getNativeWindowHandle().readBigUInt64LE(0)
-  const corner = Buffer.alloc(4)
-  corner.writeInt32LE(DWMWCP_DONOTROUND)
-  const cornerHr = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, corner, 4)
-  const border = Buffer.alloc(4)
-  border.writeUInt32LE(DWMWA_COLOR_NONE)
-  const borderHr = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, border, 4)
+  let cornerHr = 0
+  let borderHr = 0
+  if (styledHwnd !== hwnd) {
+    const corner = Buffer.alloc(4)
+    corner.writeInt32LE(DWMWCP_DONOTROUND)
+    cornerHr = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, corner, 4)
+    const border = Buffer.alloc(4)
+    border.writeUInt32LE(DWMWA_COLOR_NONE)
+    borderHr = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, border, 4)
+    styledHwnd = hwnd
+    regionKey = ''
+  }
 
   const dip = win.getBounds()
   const px = screen.dipToScreenRect(win, { x: 0, y: 0, width: dip.width, height: dip.height })
   if (px.width < 8 || px.height < 8) return { cornerHr, borderHr, px }
   const scale = dip.height > 0 ? px.height / dip.height : 1
   const radius = Number.isFinite(radiusDip) ? radiusDip : dip.height / 2
-  const ellipse = Math.max(2, Math.round(Math.min(px.height, radius * 2 * scale)))
-  // Right and bottom are exclusive. A diameter equal to the height makes a pill.
+  const ellipse = Math.max(2, Math.round(Math.min(px.width, px.height, radius * 2 * scale)))
+  const nextKey = `${px.width}x${px.height}:${ellipse}`
+  if (!force && nextKey === regionKey) return { cornerHr, borderHr, px, dip, skipped: true }
+  regionKey = nextKey
+  // Right and bottom are exclusive. A diameter equal to the short side makes a capsule.
   const region = CreateRoundRectRgn(0, 0, px.width, px.height, ellipse, ellipse)
   const regionOk = SetWindowRgn(hwnd, region, 1)
   return { cornerHr, borderHr, regionOk, px, dip }
 }
 
-module.exports = { shapeIsland, fullscreenCover, liftIsland }
+module.exports = { shapeIsland, fullscreenCover, liftIsland, setSmoothTimers }

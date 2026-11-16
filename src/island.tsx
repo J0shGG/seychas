@@ -46,7 +46,10 @@ export function Island() {
   const [open, setOpen] = useState(false)
   const [covered, setCovered] = useState(false)
   const leaveTimer = useRef(0)
+  const watchRef = useRef(0)
+  const hoverGen = useRef(0)
   const coveredRef = useRef(false)
+  const stopHover = useRef(() => {})
   const edge: IslandEdge = state?.settings?.islandEdge === 'left' || state?.settings?.islandEdge === 'right'
     ? state.settings.islandEdge
     : 'top'
@@ -64,7 +67,10 @@ export function Island() {
     const mark = (next: boolean) => {
       coveredRef.current = next
       setCovered(next)
-      if (next) setOpen(false)
+      if (next) {
+        stopHover.current()
+        setOpen(false)
+      }
     }
     window.seychas?.covered?.().then((covered) => {
       if (alive) mark(Boolean(covered))
@@ -113,20 +119,57 @@ export function Island() {
   const todayLine = `Сегодня ${formatMinutes(todayMs)} · ${cycles} ${plural(cycles, 'круг', 'круга', 'кругов')}`
   const height = expandedHeight(Boolean(title), Boolean(intention), Boolean(session && !done))
 
+  stopHover.current = () => {
+    hoverGen.current += 1
+    window.clearInterval(watchRef.current)
+    watchRef.current = 0
+    window.clearTimeout(leaveTimer.current)
+  }
+
+  function collapseNow() {
+    stopHover.current()
+    setOpen(false)
+    window.seychas?.setExpanded?.(false, ISLAND_COLLAPSED)
+  }
+
   function expand() {
     if (coveredRef.current) return
     window.clearTimeout(leaveTimer.current)
+    const gen = hoverGen.current
     setOpen(true)
     window.seychas?.setExpanded?.(true, height)
+    if (watchRef.current) return
+    let outside = 0
+    watchRef.current = window.setInterval(() => {
+      const ask = window.seychas?.pointerInside
+      if (!ask) return
+      void ask().then((inside) => {
+        if (gen !== hoverGen.current) return
+        if (inside) {
+          outside = 0
+          return
+        }
+        outside += 1
+        if (outside >= 2) collapseNow()
+      })
+    }, 50)
   }
 
   function collapse() {
     window.clearTimeout(leaveTimer.current)
     leaveTimer.current = window.setTimeout(() => {
-      setOpen(false)
-      window.seychas?.setExpanded?.(false, ISLAND_COLLAPSED)
-    }, 90)
+      const ask = window.seychas?.pointerInside
+      if (!ask) {
+        collapseNow()
+        return
+      }
+      void ask().then((inside) => {
+        if (!inside) collapseNow()
+      })
+    }, 80)
   }
+
+  useEffect(() => () => stopHover.current(), [])
 
   const side = edge !== 'top'
   const rail = side && !open && !covered
