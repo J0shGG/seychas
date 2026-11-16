@@ -1,7 +1,7 @@
 {
   "name": "seychas",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Сейчас — фокус на одной задаче",
   "author": "Сейчас",
   "type": "module",
