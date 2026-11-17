@@ -25,7 +25,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 ## Релизы
 
-- [Лампа 2.0.0](https://github.com/J0shGG/seychas/releases/tag/v2.0.0) — latest, `Seychas-Setup.exe`. Ставит C#-Лампу вместо Electron и переносит задачи из `seychas.v1`.
+- [Лампа 2.1.0](https://github.com/J0shGG/seychas/releases/tag/v2.1.0) — latest, `Seychas-Setup.exe`. Ставит C#-Лампу вместо Electron и переносит задачи из `seychas.v1`.
+- [Лампа 2.0.0](https://github.com/J0shGG/seychas/releases/tag/v2.0.0) — предыдущий C#-установщик.
 - [Лампа C# 1.0.0](https://github.com/J0shGG/seychas/releases/tag/csharp-1.0.0) — портативный `Lamp-1.0.0.exe`, не latest.
 
 Установщик кладёт приложение в `%LocalAppData%\Programs\Seychas\Seychas.exe` и обновляет ярлыки «Лампа». Состояние — `%LocalAppData%\Lamp\state.json`. При первом запуске (и при установке) читается Chromium localStorage Electron (`%AppData%\Seychas` / `seychas`) и задачи, мысли, журнал дней сливаются в этот файл.

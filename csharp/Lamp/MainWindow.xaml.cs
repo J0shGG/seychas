@@ -271,7 +271,7 @@ public partial class MainWindow : Window
                 BorderBrush = (Brush)FindResource("CopperBrush"),
                 Margin = new Thickness(2),
                 Padding = new Thickness(2, 6, 2, 6),
-                Foreground = (Brush)FindResource("PaperBrush"),
+                Style = (Style)FindResource("CalCell"),
                 Tag = key,
             };
             cell.Click += (_, _) => { _journalDay = (string)cell.Tag; ShowJournal(); };
@@ -572,7 +572,7 @@ public partial class MainWindow : Window
                 IsEnabled = key.CompareTo(Format.TodayKey()) <= 0,
                 Tag = key,
                 Margin = new Thickness(2),
-                Foreground = (Brush)FindResource("PaperBrush"),
+                Style = (Style)FindResource("CalCell"),
                 BorderBrush = key == _journalDay ? (Brush)FindResource("CopperBrightBrush") : Brushes.Transparent,
                 BorderThickness = new Thickness(1),
             };

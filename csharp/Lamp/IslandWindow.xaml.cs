@@ -23,6 +23,7 @@ public partial class IslandWindow : Window
     readonly LampStore _store;
     readonly DispatcherTimer _coverTimer;
     readonly DispatcherTimer _leaveTimer;
+    readonly DispatcherTimer _hostSyncTimer;
     readonly IEasingFunction _ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
     bool _expanded;
@@ -52,6 +53,12 @@ public partial class IslandWindow : Window
         {
             _leaveTimer.Stop();
             if (!_dragging && !Capsule.IsMouseOver) Collapse();
+        };
+        _hostSyncTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(AnimMs + 20) };
+        _hostSyncTimer.Tick += (_, _) =>
+        {
+            _hostSyncTimer.Stop();
+            if (_wanted) PlaceWindow(false);
         };
         Loaded += (_, _) => Native.LiftTopmost(this);
         Closing += (_, e) =>
@@ -89,6 +96,7 @@ public partial class IslandWindow : Window
         _expanded = false;
         _dragging = false;
         _coverTimer.Stop();
+        _hostSyncTimer.Stop();
         Hide();
     }
 
@@ -323,8 +331,9 @@ public partial class IslandWindow : Window
 
     void SyncHostSize()
     {
-        var w = IsCircle ? Circle : WindowW;
-        var h = IsCircle ? Circle : WindowH;
+        var circleHost = IsCircle && CapsuleFitsCircle();
+        var w = circleHost ? Circle : WindowW;
+        var h = circleHost ? Circle : WindowH;
         if (Math.Abs(Width - w) < 0.5 && Math.Abs(Height - h) < 0.5) return;
         BeginAnimation(WidthProperty, null);
         BeginAnimation(HeightProperty, null);
@@ -332,12 +341,19 @@ public partial class IslandWindow : Window
         Height = h;
     }
 
+    bool CapsuleFitsCircle()
+    {
+        var capW = Capsule.ActualWidth > 1 ? Capsule.ActualWidth : Capsule.Width;
+        var capH = Capsule.ActualHeight > 1 ? Capsule.ActualHeight : Capsule.Height;
+        return capW <= Circle + 4 && capH <= Circle + 4;
+    }
+
     void PlaceWindow(bool animate)
     {
         SyncHostSize();
         var area = Native.MonitorAreaDip(this, fullMonitor: _covered && !_dragging);
-        var hostW = ActualWidth > 1 ? ActualWidth : Width;
-        var hostH = ActualHeight > 1 ? ActualHeight : Height;
+        var hostW = Width > 1 ? Width : WindowW;
+        var hostH = Height > 1 ? Height : WindowH;
         const double margin = 10;
         double x, y;
         switch (_store.State.Settings.IslandEdge)
@@ -374,10 +390,12 @@ public partial class IslandWindow : Window
 
     void Expand()
     {
-        if (_dragging || _covered) return;
+        if (_dragging) return;
         _leaveTimer.Stop();
+        _hostSyncTimer.Stop();
         if (_expanded) return;
         _expanded = true;
+        PlaceWindow(false);
         ApplyShape(true);
         Refresh();
     }
@@ -389,6 +407,12 @@ public partial class IslandWindow : Window
         _expanded = false;
         ApplyShape(true);
         Refresh();
+        if (_covered)
+        {
+            _hostSyncTimer.Stop();
+            _hostSyncTimer.Start();
+        }
+        else PlaceWindow(false);
     }
 
     void PollCover()

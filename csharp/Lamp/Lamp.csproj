@@ -12,9 +12,9 @@
     <Product>Лампа</Product>
     <Description>Лампа — фокус на одной задаче</Description>
     <Authors>J0shGG</Authors>
-    <Version>2.0.0</Version>
-    <FileVersion>2.0.0</FileVersion>
-    <InformationalVersion>2.0.0</InformationalVersion>
+    <Version>2.1.0</Version>
+    <FileVersion>2.1.0</FileVersion>
+    <InformationalVersion>2.1.0</InformationalVersion>
     <AssemblyTitle>Лампа</AssemblyTitle>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
