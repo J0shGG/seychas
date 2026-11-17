@@ -1,6 +1,6 @@
 # Лампа на C# / WPF
 
-Черновик переписывания «Лампы» с Electron на Windows-приложение. Ветка `csharp`. Текущая Electron-версия остаётся в корне репозитория.
+Переписывание «Лампы» с Electron на Windows-приложение. Ветка `csharp`. Текущая Electron-версия остаётся в корне репозитория для сравнения.
 
 Остров не меняет размер HWND: окно сразу большого размера и прозрачное, капсула растёт внутри. Так hover не дерётся с ресайзом окна.
 
@@ -16,14 +16,21 @@ dotnet run
 Собрать один exe:
 
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
 ```
 
 Файл появится в `bin\Release\net8.0-windows\win-x64\publish\Lamp.exe`.
 
-Готовый релиз: [Лампа C# 1.0.0](https://github.com/J0shGG/seychas/releases/tag/csharp-1.0.0) — скачай `Lamp-1.0.0.exe`. Это не latest для Electron: обновление `Seychas-Setup.exe` по-прежнему смотрит на v1.4.0.
+Для обновления Electron 1.4.0 этот же файл публикуется как `Seychas-Setup.exe` в latest-релизе GitHub.
 
-## Что уже есть
+## Релизы
+
+- [Лампа 2.0.0](https://github.com/J0shGG/seychas/releases/tag/v2.0.0) — latest, `Seychas-Setup.exe`. Ставит C#-Лампу вместо Electron и переносит задачи из `seychas.v1`.
+- [Лампа C# 1.0.0](https://github.com/J0shGG/seychas/releases/tag/csharp-1.0.0) — портативный `Lamp-1.0.0.exe`, не latest.
+
+Установщик кладёт приложение в `%LocalAppData%\Programs\Seychas\Seychas.exe` и обновляет ярлыки «Лампа». Состояние — `%LocalAppData%\Lamp\state.json`. При первом запуске (и при установке) читается Chromium localStorage Electron (`%AppData%\Seychas` / `seychas`) и задачи, мысли, журнал дней сливаются в этот файл.
+
+## Что есть
 
 - стол: задачи, круг, мысли, сегодня, неделя
 - темы Лампа / Светлая / Тёмная / Чернила
@@ -31,11 +38,10 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - остров: наведение, перетаскивание к краю, круг поверх полноэкранного приложения
 - колокол, фон (дождь / огонь / кафе), громкость
 - счётчик «N человек сейчас» через тот же ntfy-топик
-- состояние в `%LocalAppData%\Lamp\state.json` (отдельное от Electron localStorage)
+- переход с Electron 1.4.0: `Seychas-Setup.exe` как latest, перенос `seychas.v1`
 
 ## Ещё не как в 1.4.0
 
-- автообновление с GitHub (установщик Electron сюда не подходит)
 - шрифты Cormorant Garamond и Manrope — пока Georgia и Segoe UI
 - пиксель в пиксель CSS-стол
 

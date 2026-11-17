@@ -21,20 +21,28 @@ public static class StorageService
         "Lamp",
         "state.json");
 
-    public static AppState Load()
+    public static JsonSerializerOptions SerializerOptions => Json;
+
+    public static AppState Parse(string raw)
+    {
+        var state = JsonSerializer.Deserialize<AppState>(raw, Json);
+        return state is null ? new AppState() : StateReducer.Hydrate(state);
+    }
+
+    public static AppState LoadWithoutImport()
     {
         try
         {
             if (!File.Exists(FilePath)) return new AppState();
-            var raw = File.ReadAllText(FilePath);
-            var state = JsonSerializer.Deserialize<AppState>(raw, Json);
-            return state is null ? new AppState() : StateReducer.Hydrate(state);
+            return Parse(File.ReadAllText(FilePath));
         }
         catch
         {
             return new AppState();
         }
     }
+
+    public static AppState Load() => ElectronImport.ApplyOnce(LoadWithoutImport());
 
     public static void Save(AppState state)
     {

@@ -36,6 +36,19 @@ public sealed class TrayService : IDisposable
 
     static Drawing.Icon LoadIcon()
     {
+        try
+        {
+            var path = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(path))
+            {
+                var fromExe = Drawing.Icon.ExtractAssociatedIcon(path);
+                if (fromExe is not null) return fromExe;
+            }
+        }
+        catch
+        {
+            /* fall through */
+        }
         var ico = Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico");
         if (File.Exists(ico)) return new Drawing.Icon(ico);
         return Drawing.SystemIcons.Application;

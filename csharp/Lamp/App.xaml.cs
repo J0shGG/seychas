@@ -19,6 +19,22 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        var args = e.Args;
+        if (SetupService.IsUninstall(args))
+        {
+            try { SetupService.Uninstall(SetupService.IsQuiet(args), SetupService.IsFromTemp(args)); }
+            catch { /* keep going so ARP does not hang */ }
+            if (!SetupService.IsQuiet(args) && SetupService.IsFromTemp(args))
+                MessageBox.Show("Лампа удалена. Задачи в профиле остались.", "Лампа", MessageBoxButton.OK, MessageBoxImage.None);
+            Shutdown();
+            return;
+        }
+        if (SetupService.IsSetupMode(args))
+        {
+            var setup = new SetupWindow();
+            setup.Show();
+            return;
+        }
         Store = LampStore.Load();
         ThemeService.Apply(Store.State.Settings.Theme);
         _tray = new TrayService(Restore, Quit);
