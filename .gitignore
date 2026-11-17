@@ -21,5 +21,10 @@ release
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+
+# C# / WPF
+csharp/**/bin/
+csharp/**/obj/
+csharp/**/*.user
+!csharp/**/*.sln

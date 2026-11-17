@@ -1,0 +1,16 @@
+global using Application = System.Windows.Application;
+global using Brush = System.Windows.Media.Brush;
+global using Brushes = System.Windows.Media.Brushes;
+global using Button = System.Windows.Controls.Button;
+global using Color = System.Windows.Media.Color;
+global using ColorConverter = System.Windows.Media.ColorConverter;
+global using FontFamily = System.Windows.Media.FontFamily;
+global using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+global using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
+global using MouseEventArgs = System.Windows.Input.MouseEventArgs;
+global using Orientation = System.Windows.Controls.Orientation;
+global using Pen = System.Windows.Media.Pen;
+global using Point = System.Windows.Point;
+global using Size = System.Windows.Size;
+global using TextBox = System.Windows.Controls.TextBox;
+global using UniformGrid = System.Windows.Controls.Primitives.UniformGrid;
