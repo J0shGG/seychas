@@ -12,7 +12,7 @@
     <Product>Лампа</Product>
     <Description>Лампа — фокус на одной задаче</Description>
     <Authors>J0shGG</Authors>
-    <Version>1.4.0</Version>
+    <Version>1.0.0</Version>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>

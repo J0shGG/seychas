@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -22,16 +23,20 @@ public partial class IslandWindow : Window
     readonly LampStore _store;
     readonly DispatcherTimer _coverTimer;
     readonly DispatcherTimer _leaveTimer;
-    readonly CubicEase _ease = new() { EasingMode = EasingMode.EaseOut };
+    readonly IEasingFunction _ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
     bool _expanded;
     bool _covered;
     bool _dragging;
     bool _wanted;
     bool _swallowClick;
+    bool _pulsing;
     Point _dragStart;
     IslandEdge? _heldEdge;
     int _coverMisses;
+    double _lastW;
+    double _lastH;
+    string _lastMode = "";
 
     public IslandWindow(LampStore store)
     {
@@ -60,13 +65,17 @@ public partial class IslandWindow : Window
         Refresh();
     }
 
+    bool IsSide => _store.State.Settings.IslandEdge is IslandEdge.left or IslandEdge.right;
+    bool IsRail => IsSide && !_expanded && !_covered && !_dragging;
+    bool IsCircle => _dragging || (_covered && !_expanded);
+
     public void ShowIsland()
     {
         _wanted = true;
         _expanded = false;
         _covered = Native.FullscreenCover(this);
         _coverMisses = 0;
-        PlaceWindow();
+        PlaceWindow(false);
         ApplyShape(false);
         Native.ShowInactive(this);
         Native.LiftTopmost(this);
@@ -89,8 +98,10 @@ public partial class IslandWindow : Window
         Dispatcher.Invoke(() =>
         {
             var s = _store.State;
-            TimeText.Text = s.Session is null ? (_expanded ? "Лампа" : "") : _store.ClockText;
-            if (s.Session is null && !_expanded && IsSide) TimeText.Text = "Лампа";
+            var clock = s.Session is null ? "Лампа" : _store.ClockText;
+            TimeText.Text = s.Session is null && !_expanded ? "" : clock;
+            if (_expanded && s.Session is null) TimeText.Text = "Лампа";
+            RailTime.Text = clock;
             LabelText.Text = _store.IslandLabel;
             StatusText.Text = _store.IslandStatus;
             TitleText.Text = _store.CurrentOpenTask()?.Title ?? "";
@@ -99,25 +110,82 @@ public partial class IslandWindow : Window
             TodayText.Text = _store.TodayLine;
             IntentText.Text = s.Intention.Trim();
             IntentText.Visibility = string.IsNullOrEmpty(IntentText.Text) ? Visibility.Collapsed : Visibility.Visible;
-            var task = _store.CurrentOpenTask();
-            DoneButton.Visibility = task is null ? Visibility.Collapsed : Visibility.Visible;
-            ProgressTrack.Visibility = s.Session is { Status: not SessionStatus.done } ? Visibility.Visible : Visibility.Collapsed;
-            ProgressFill.Width = Math.Max(0, (ProgressTrack.ActualWidth <= 0 ? 200 : ProgressTrack.ActualWidth) * _store.Progress);
-            Dot.Fill = s.Session?.Status switch
-            {
-                SessionStatus.running => (Brush)FindResource("CopperBrightBrush"),
-                SessionStatus.paused => (Brush)FindResource("MutedBrush"),
-                _ => (Brush)FindResource("CopperBrush"),
-            };
-            if (_expanded && !_dragging && !_covered) ApplyShape(true);
+            DoneButton.Visibility = _store.CurrentOpenTask() is null ? Visibility.Collapsed : Visibility.Visible;
+
+            var hasProgress = s.Session is { Status: not SessionStatus.done };
+            ProgressTrack.Visibility = hasProgress && !IsRail && !IsCircle ? Visibility.Visible : Visibility.Collapsed;
+            RailProgress.Visibility = hasProgress && IsRail ? Visibility.Visible : Visibility.Collapsed;
+            UpdateProgress(_store.Progress, hasProgress);
+
+            PaintDot(s.Session?.Status);
+            Pulse(s.Session?.Status == SessionStatus.running);
         });
     }
 
-    bool IsSide => _store.State.Settings.IslandEdge is IslandEdge.left or IslandEdge.right;
+    void UpdateProgress(double progress, bool hasProgress)
+    {
+        progress = Math.Clamp(progress, 0, 1);
+        if (!hasProgress)
+        {
+            Animate(ProgressFill, WidthProperty, 0, 180);
+            Animate(RailProgressFill, HeightProperty, 0, 180);
+            return;
+        }
+        var trackW = ProgressTrack.ActualWidth > 1 ? ProgressTrack.ActualWidth : 220;
+        var trackH = RailProgress.ActualHeight > 1 ? RailProgress.ActualHeight : 220;
+        Animate(ProgressFill, WidthProperty, trackW * progress, 280);
+        Animate(RailProgressFill, HeightProperty, trackH * progress, 280);
+    }
+
+    void PaintDot(SessionStatus? status)
+    {
+        var fill = status switch
+        {
+            SessionStatus.running => (Color)FindResource("CopperBright"),
+            SessionStatus.paused => Colors.Transparent,
+            _ => (Color)FindResource("Gold"),
+        };
+        var stroke = status == SessionStatus.paused ? (Color)FindResource("Gold") : Colors.Transparent;
+        Dot.Fill = new SolidColorBrush(fill);
+        RailDot.Fill = new SolidColorBrush(fill);
+        Dot.Stroke = new SolidColorBrush(stroke);
+        RailDot.Stroke = new SolidColorBrush(stroke);
+        Dot.StrokeThickness = status == SessionStatus.paused ? 1.5 : 0;
+        RailDot.StrokeThickness = Dot.StrokeThickness;
+        var size = IsCircle ? 12 : 8;
+        Dot.Width = Dot.Height = size;
+        RailDot.Width = RailDot.Height = size;
+    }
+
+    void Pulse(bool on)
+    {
+        if (on == _pulsing) return;
+        _pulsing = on;
+        if (!on)
+        {
+            DotScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            DotScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            RailDotScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            RailDotScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            DotScale.ScaleX = DotScale.ScaleY = 1;
+            RailDotScale.ScaleX = RailDotScale.ScaleY = 1;
+            return;
+        }
+        var pulse = new DoubleAnimation(1, 0.68, TimeSpan.FromMilliseconds(800))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        DotScale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse);
+        DotScale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse.Clone());
+        RailDotScale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse.Clone());
+        RailDotScale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse.Clone());
+    }
 
     (double W, double H) TargetSize()
     {
-        if (_dragging || (_covered && !_expanded)) return (Circle, Circle);
+        if (IsCircle) return (Circle, Circle);
         var edge = _store.State.Settings.IslandEdge;
         if (edge == IslandEdge.top)
         {
@@ -141,7 +209,10 @@ public partial class IslandWindow : Window
     void ApplyShape(bool animate)
     {
         var (w, h) = TargetSize();
-        var circle = w <= Circle + 1 && h <= Circle + 1;
+        var mode = $"{(IsCircle ? "c" : IsRail ? "r" : _expanded ? "o" : "t")}:{_store.State.Settings.IslandEdge}:{Math.Round(w)}x{Math.Round(h)}";
+        var same = mode == _lastMode;
+        _lastMode = mode;
+
         Capsule.HorizontalAlignment = _store.State.Settings.IslandEdge switch
         {
             IslandEdge.left => System.Windows.HorizontalAlignment.Left,
@@ -149,80 +220,163 @@ public partial class IslandWindow : Window
             _ => System.Windows.HorizontalAlignment.Center,
         };
         Capsule.VerticalAlignment = IsSide ? VerticalAlignment.Center : VerticalAlignment.Top;
+        RailProgress.HorizontalAlignment = _store.State.Settings.IslandEdge == IslandEdge.right
+            ? System.Windows.HorizontalAlignment.Left
+            : System.Windows.HorizontalAlignment.Right;
+        RailProgress.Margin = _store.State.Settings.IslandEdge == IslandEdge.right
+            ? new Thickness(6, 18, 0, 18)
+            : new Thickness(0, 18, 6, 18);
 
-        if (!animate)
+        if (!same || !animate)
         {
-            Capsule.BeginAnimation(WidthProperty, null);
-            Capsule.BeginAnimation(HeightProperty, null);
-            Capsule.Width = w;
-            Capsule.Height = h;
-        }
-        else
-        {
-            AnimateDim(FrameworkElement.WidthProperty, Capsule.ActualWidth > 0 ? Capsule.ActualWidth : Capsule.Width, w);
-            AnimateDim(FrameworkElement.HeightProperty, Capsule.ActualHeight > 0 ? Capsule.ActualHeight : Capsule.Height, h);
+            if (!animate)
+            {
+                StopDim();
+                Capsule.Width = w;
+                Capsule.Height = h;
+                _lastW = w;
+                _lastH = h;
+            }
+            else
+            {
+                var fromW = Capsule.ActualWidth > 1 ? Capsule.ActualWidth : Capsule.Width;
+                var fromH = Capsule.ActualHeight > 1 ? Capsule.ActualHeight : Capsule.Height;
+                Animate(Capsule, FrameworkElement.WidthProperty, fromW, w, AnimMs);
+                Animate(Capsule, FrameworkElement.HeightProperty, fromH, h, AnimMs);
+                _lastW = w;
+                _lastH = h;
+            }
         }
 
-        Capsule.CornerRadius = new CornerRadius(circle || !_expanded ? Math.Min(w, h) / 2 : 22);
-        Capsule.Background = _expanded
-            ? (Brush)FindResource("IslandOpenBrush")
-            : (Brush)FindResource("IslandFillBrush");
-        Capsule.BorderThickness = circle ? new Thickness(0) : new Thickness(1);
-        Body.Opacity = _expanded && !circle ? 1 : 0;
-        LabelText.Visibility = circle ? Visibility.Collapsed : Visibility.Visible;
-        StatusText.Visibility = circle || string.IsNullOrEmpty(StatusText.Text) ? Visibility.Collapsed : Visibility.Visible;
-        TimeText.Visibility = circle ? Visibility.Collapsed : Visibility.Visible;
-        TopRow.HorizontalAlignment = IsSide && !_expanded && !circle ? System.Windows.HorizontalAlignment.Center : System.Windows.HorizontalAlignment.Left;
-        if (IsSide && !_expanded && !circle)
-        {
-            TopRow.LayoutTransform = new RotateTransform(-90);
-            TimeText.FontSize = 13;
-        }
-        else
-        {
-            TopRow.LayoutTransform = Transform.Identity;
-            TimeText.FontSize = _expanded ? 28 : 18;
-        }
+        Capsule.CornerRadius = new CornerRadius(IsCircle || !_expanded ? Math.Min(w, h) / 2 : 22);
+        Capsule.BorderThickness = IsCircle ? new Thickness(0) : new Thickness(1);
+        AnimateFill(BrushColor(_expanded && !IsCircle ? "IslandOpen" : "IslandFill"), animate);
+
+        var showRail = IsRail || IsCircle;
+        var showCard = !IsRail && !IsCircle;
+        RailLayout.IsHitTestVisible = IsRail;
+        CardLayout.IsHitTestVisible = showCard;
+        AnimateOpacity(RailLayout, showRail ? 1 : 0, showRail ? 180 : 90, showRail ? 40 : 0);
+        AnimateOpacity(CardLayout, showCard ? 1 : 0, showCard ? 180 : 90, showCard ? 40 : 0);
+        RailTime.Visibility = IsRail ? Visibility.Visible : Visibility.Collapsed;
+        AnimateOpacity(RailTime, IsRail ? 1 : 0, 140);
+
+        var bodyOn = _expanded && !IsCircle;
+        AnimateOpacity(Body, bodyOn ? 1 : 0, 180, bodyOn ? 70 : 0);
+        Animate(BodyShift, TranslateTransform.YProperty, bodyOn ? 0 : 10, AnimMs);
+        Body.IsHitTestVisible = bodyOn;
+
+        AnimateOpacity(LabelText, !_expanded && showCard ? 1 : 0, 160);
+        AnimateOpacity(StatusText, _expanded && showCard && !string.IsNullOrEmpty(StatusText.Text) ? 1 : 0, 180, _expanded ? 50 : 0);
+        Animate(TimeText, TextBlock.FontSizeProperty, _expanded ? 28 : 15, AnimMs);
+        HeaderBar.Height = _expanded ? 54 : 48;
+        ProgressTrack.Margin = _expanded ? new Thickness(16, 0, 16, 12) : new Thickness(18, 0, 18, 6);
+
+        PaintDot(_store.State.Session?.Status);
     }
 
-    void AnimateDim(DependencyProperty prop, double from, double to)
+    Color BrushColor(string key)
     {
-        Capsule.BeginAnimation(prop, new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(AnimMs))
+        if (FindResource(key) is Color c) return c;
+        if (FindResource(key + "Brush") is SolidColorBrush b) return b.Color;
+        return Color.FromRgb(0x14, 0x11, 0x0F);
+    }
+
+    void AnimateFill(Color to, bool animate)
+    {
+        if (!animate)
+        {
+            CapsuleFill.BeginAnimation(SolidColorBrush.ColorProperty, null);
+            CapsuleFill.Color = to;
+            return;
+        }
+        CapsuleFill.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(to, TimeSpan.FromMilliseconds(AnimMs))
         {
             EasingFunction = _ease,
         });
     }
 
-    void PlaceWindow()
+    void AnimateOpacity(UIElement el, double to, double ms, double delay = 0)
     {
-        var dpi = Native.DpiOf(this);
-        var cursor = Native.CursorDip(dpi);
-        var work = Native.WorkAreaDip(cursor, dpi);
+        el.BeginAnimation(OpacityProperty, new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(delay),
+            EasingFunction = _ease,
+        });
+    }
+
+    void Animate(IAnimatable target, DependencyProperty prop, double to, double ms) =>
+        Animate(target, prop, null, to, ms);
+
+    void Animate(IAnimatable target, DependencyProperty prop, double? from, double to, double ms)
+    {
+        var anim = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)) { EasingFunction = _ease };
+        if (from is double f) anim.From = f;
+        target.BeginAnimation(prop, anim);
+    }
+
+    void StopDim()
+    {
+        Capsule.BeginAnimation(FrameworkElement.WidthProperty, null);
+        Capsule.BeginAnimation(FrameworkElement.HeightProperty, null);
+    }
+
+    void SyncHostSize()
+    {
+        var w = IsCircle ? Circle : WindowW;
+        var h = IsCircle ? Circle : WindowH;
+        if (Math.Abs(Width - w) < 0.5 && Math.Abs(Height - h) < 0.5) return;
+        BeginAnimation(WidthProperty, null);
+        BeginAnimation(HeightProperty, null);
+        Width = w;
+        Height = h;
+    }
+
+    void PlaceWindow(bool animate)
+    {
+        SyncHostSize();
+        var area = Native.MonitorAreaDip(this, fullMonitor: _covered && !_dragging);
+        var hostW = ActualWidth > 1 ? ActualWidth : Width;
+        var hostH = ActualHeight > 1 ? ActualHeight : Height;
         const double margin = 10;
         double x, y;
         switch (_store.State.Settings.IslandEdge)
         {
             case IslandEdge.left:
-                x = work.Left + margin;
-                y = work.Top + (work.Height - WindowH) / 2;
+                x = area.Left + margin;
+                y = area.Top + (area.Height - hostH) / 2;
                 break;
             case IslandEdge.right:
-                x = work.Right - WindowW - margin;
-                y = work.Top + (work.Height - WindowH) / 2;
+                x = area.Right - hostW - margin;
+                y = area.Top + (area.Height - hostH) / 2;
                 break;
             default:
-                x = work.Left + (work.Width - WindowW) / 2;
-                y = work.Top + margin;
+                x = area.Left + (area.Width - hostW) / 2;
+                y = area.Top + margin;
                 break;
         }
-        Left = x;
-        Top = y;
+        x = Clamp(x, area.Left, area.Right - hostW);
+        y = Clamp(y, area.Top, area.Bottom - hostH);
+        if (!animate)
+        {
+            BeginAnimation(LeftProperty, null);
+            BeginAnimation(TopProperty, null);
+            Left = x;
+            Top = y;
+            return;
+        }
+        BeginAnimation(LeftProperty, new DoubleAnimation(Left, x, TimeSpan.FromMilliseconds(280)) { EasingFunction = _ease });
+        BeginAnimation(TopProperty, new DoubleAnimation(Top, y, TimeSpan.FromMilliseconds(280)) { EasingFunction = _ease });
     }
+
+    static double Clamp(double value, double min, double max) =>
+        max < min ? min : Math.Min(max, Math.Max(min, value));
 
     void Expand()
     {
-        if (_dragging) return;
+        if (_dragging || _covered) return;
         _leaveTimer.Stop();
+        if (_expanded) return;
         _expanded = true;
         ApplyShape(true);
         Refresh();
@@ -231,6 +385,7 @@ public partial class IslandWindow : Window
     void Collapse()
     {
         if (_dragging) return;
+        if (!_expanded) return;
         _expanded = false;
         ApplyShape(true);
         Refresh();
@@ -243,18 +398,28 @@ public partial class IslandWindow : Window
         if (cover)
         {
             _coverMisses = 0;
-            if (_covered) return;
+            if (_covered)
+            {
+                Native.LiftTopmost(this);
+                PlaceWindow(false);
+                return;
+            }
             _covered = true;
             _expanded = false;
+            StopDim();
+            PlaceWindow(false);
+            ApplyShape(false);
             Native.LiftTopmost(this);
-            ApplyShape(true);
+            Refresh();
             return;
         }
         if (!_covered) return;
         _coverMisses++;
         if (_coverMisses < 2) return;
         _covered = false;
+        PlaceWindow(false);
         ApplyShape(true);
+        Refresh();
     }
 
     void Capsule_MouseEnter(object sender, MouseEventArgs e) => Expand();
@@ -286,6 +451,8 @@ public partial class IslandWindow : Window
             _expanded = false;
             _swallowClick = true;
             ApplyShape(false);
+            SyncHostSize();
+            Refresh();
         }
         var dpi = Native.DpiOf(this);
         var cursor = Native.CursorDip(dpi);
@@ -308,7 +475,9 @@ public partial class IslandWindow : Window
             else if (edge == IslandEdge.right) x = work.Right - size - margin;
             else y = work.Top + margin;
         }
-        Left = x - (Capsule.Margin.Left);
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
+        Left = x;
         Top = y;
         Capsule.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
         Capsule.VerticalAlignment = VerticalAlignment.Top;
@@ -327,8 +496,9 @@ public partial class IslandWindow : Window
             _dragging = false;
             _heldEdge = null;
             _covered = Native.FullscreenCover(this);
-            PlaceWindow();
+            PlaceWindow(true);
             ApplyShape(true);
+            Refresh();
             Dispatcher.BeginInvoke(() => _swallowClick = false, DispatcherPriority.Background);
             return;
         }

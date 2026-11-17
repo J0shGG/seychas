@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using Lamp.Core;
 
@@ -355,10 +356,30 @@ public partial class MainWindow : Window
 
     void Ring_Click(object sender, RoutedEventArgs e)
     {
+        PulseRing();
         var session = _store.State.Session;
         if (session is null) _store.Dispatch(ActionKind.StartFocus);
         else if (session.Status == SessionStatus.running) _store.Dispatch(ActionKind.Pause);
         else if (session.Status == SessionStatus.paused) _store.Dispatch(ActionKind.Resume);
+    }
+
+    void PulseRing()
+    {
+        var frames = new DoubleAnimationUsingKeyFrames();
+        frames.KeyFrames.Add(new EasingDoubleKeyFrame(0.94, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(90)))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        });
+        frames.KeyFrames.Add(new EasingDoubleKeyFrame(1.04, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(240)))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        });
+        frames.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(400)))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut },
+        });
+        RingScale.BeginAnimation(ScaleTransform.ScaleXProperty, frames);
+        RingScale.BeginAnimation(ScaleTransform.ScaleYProperty, frames.Clone());
     }
 
     void Reset_Click(object sender, RoutedEventArgs e) => _store.Dispatch(ActionKind.Stop);
@@ -393,8 +414,14 @@ public partial class MainWindow : Window
     void HideOverlay()
     {
         _overlay = OverlayKind.None;
-        Overlay.Visibility = Visibility.Collapsed;
-        OverlayBody.Children.Clear();
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(160));
+        fade.Completed += (_, _) =>
+        {
+            if (_overlay != OverlayKind.None) return;
+            Overlay.Visibility = Visibility.Collapsed;
+            OverlayBody.Children.Clear();
+        };
+        Overlay.BeginAnimation(OpacityProperty, fade);
     }
 
     void ShowOverlay(OverlayKind kind)
@@ -402,6 +429,10 @@ public partial class MainWindow : Window
         _overlay = kind;
         Overlay.Visibility = Visibility.Visible;
         OverlayBody.Children.Clear();
+        Overlay.BeginAnimation(OpacityProperty, new DoubleAnimation(1, TimeSpan.FromMilliseconds(180))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        });
     }
 
     void ShowSettings()

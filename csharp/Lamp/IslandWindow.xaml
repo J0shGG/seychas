@@ -17,7 +17,6 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 CornerRadius="24"
-                Background="{DynamicResource IslandFillBrush}"
                 BorderBrush="{DynamicResource IslandLineBrush}"
                 BorderThickness="1"
                 ClipToBounds="True"
@@ -27,37 +26,89 @@
                 MouseLeftButtonDown="Capsule_MouseLeftButtonDown"
                 MouseLeftButtonUp="Capsule_MouseLeftButtonUp"
                 MouseMove="Capsule_MouseMove">
-            <Grid Margin="14,0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="48"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <StackPanel x:Name="TopRow" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Ellipse x:Name="Dot" Width="8" Height="8" Margin="0,0,10,0" Fill="{DynamicResource CopperBrush}"/>
-                    <TextBlock x:Name="TimeText" FontFamily="{StaticResource Serif}" FontSize="18"
-                               Foreground="{DynamicResource PaperBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <TextBlock x:Name="LabelText" FontFamily="{StaticResource Sans}" FontSize="13"
-                               Foreground="{DynamicResource PaperBrush}" VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis" MaxWidth="170"/>
-                    <TextBlock x:Name="StatusText" FontFamily="{StaticResource Sans}" FontSize="11"
-                               Foreground="{DynamicResource CopperBrightBrush}" VerticalAlignment="Center"
-                               Margin="10,0,0,0" Opacity="0.85"/>
-                </StackPanel>
-                <StackPanel x:Name="Body" Grid.Row="1" Margin="18,0,18,12" Opacity="0">
-                    <TextBlock x:Name="TitleText" FontFamily="{StaticResource Serif}" FontSize="20"
-                               Foreground="{DynamicResource PaperBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                    <TextBlock x:Name="PaceText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
-                    <TextBlock x:Name="TodayText" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,2,0,0"/>
-                    <TextBlock x:Name="IntentText" FontSize="12" FontStyle="Italic"
-                               Foreground="{DynamicResource GoldBrush}" Margin="0,4,0,8" TextWrapping="Wrap"/>
-                    <Button x:Name="DoneButton" Content="Задача выполнена" Style="{StaticResource Ghost}"
-                            HorizontalAlignment="Left" FontSize="12" Padding="12,6"
-                            Click="DoneButton_Click"/>
-                    <Border x:Name="ProgressTrack" Height="3" CornerRadius="2" Background="#33E8C9A0" Margin="0,10,0,0">
-                        <Border x:Name="ProgressFill" Height="3" CornerRadius="2" HorizontalAlignment="Left"
-                                Width="0" Background="{DynamicResource CopperBrightBrush}"/>
+            <Border.Background>
+                <SolidColorBrush x:Name="CapsuleFill" Color="#14110f"/>
+            </Border.Background>
+            <Grid>
+                <!-- Horizontal pill / expanded card -->
+                <DockPanel x:Name="CardLayout">
+                    <Grid x:Name="HeaderBar" DockPanel.Dock="Top" Height="48" Margin="12,0,14,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse x:Name="Dot" Width="8" Height="8" Margin="0,0,10,0"
+                                 VerticalAlignment="Center" Fill="{DynamicResource CopperBrush}"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <ScaleTransform x:Name="DotScale"/>
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        <TextBlock x:Name="TimeText" Grid.Column="1"
+                                   FontFamily="{StaticResource Serif}" FontSize="15"
+                                   FontWeight="Bold" Foreground="{DynamicResource PaperBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock x:Name="LabelText" Grid.Column="2"
+                                   FontFamily="{StaticResource Sans}" FontSize="12"
+                                   Foreground="{DynamicResource MutedBrush}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="StatusText" Grid.Column="3"
+                                   FontFamily="{StaticResource Sans}" FontSize="11"
+                                   Foreground="{DynamicResource CopperBrightBrush}"
+                                   VerticalAlignment="Center" Opacity="0"
+                                   Margin="8,0,0,0"/>
+                    </Grid>
+                    <Border x:Name="ProgressTrack" DockPanel.Dock="Bottom"
+                            Height="2" CornerRadius="2" Background="#29E8C9A0"
+                            Margin="18,0,18,6" HorizontalAlignment="Stretch">
+                        <Border x:Name="ProgressFill" Height="2" CornerRadius="2"
+                                HorizontalAlignment="Left" Width="0"
+                                Background="{DynamicResource CopperBrightBrush}"/>
                     </Border>
-                </StackPanel>
+                    <StackPanel x:Name="Body" Margin="16,4,16,8" Opacity="0">
+                        <StackPanel.RenderTransform>
+                            <TranslateTransform x:Name="BodyShift" Y="10"/>
+                        </StackPanel.RenderTransform>
+                        <TextBlock x:Name="TitleText" FontFamily="{StaticResource Serif}" FontSize="16"
+                                   Foreground="{DynamicResource PaperBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="PaceText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TodayText" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="IntentText" FontSize="12" FontStyle="Italic"
+                                   Foreground="{DynamicResource GoldBrush}" Margin="0,4,0,8" TextWrapping="Wrap"/>
+                        <Button x:Name="DoneButton" Content="Задача выполнена" Style="{StaticResource Ghost}"
+                                HorizontalAlignment="Left" FontSize="12" Padding="12,6"
+                                Click="DoneButton_Click"/>
+                    </StackPanel>
+                </DockPanel>
+
+                <!-- Vertical rail for left/right collapsed -->
+                <Grid x:Name="RailLayout" Opacity="0" IsHitTestVisible="False">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Ellipse x:Name="RailDot" Width="8" Height="8" Margin="0,0,0,14"
+                                 Fill="{DynamicResource CopperBrush}"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <ScaleTransform x:Name="RailDotScale"/>
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        <TextBlock x:Name="RailTime"
+                                   FontFamily="{StaticResource Serif}" FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource PaperBrush}"
+                                   HorizontalAlignment="Center">
+                            <TextBlock.LayoutTransform>
+                                <RotateTransform Angle="90"/>
+                            </TextBlock.LayoutTransform>
+                        </TextBlock>
+                    </StackPanel>
+                    <Border x:Name="RailProgress" Width="2" CornerRadius="2" Background="#29E8C9A0"
+                            HorizontalAlignment="Right" Margin="0,18,6,18">
+                        <Border x:Name="RailProgressFill" Width="2" CornerRadius="2"
+                                VerticalAlignment="Top" Height="0"
+                                Background="{DynamicResource CopperBrightBrush}"/>
+                    </Border>
+                </Grid>
             </Grid>
         </Border>
     </Grid>

@@ -95,7 +95,10 @@
                                     <StackPanel x:Name="ThoughtList" Margin="0,8,0,0"/>
                                 </StackPanel>
                                 <StackPanel VerticalAlignment="Center">
-                                    <Grid Width="260" Height="260" HorizontalAlignment="Center">
+                                    <Grid x:Name="RingWrap" Width="260" Height="260" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                        <Grid.RenderTransform>
+                                            <ScaleTransform x:Name="RingScale" ScaleX="1" ScaleY="1"/>
+                                        </Grid.RenderTransform>
                                         <c:TimerRing x:Name="Ring"
                                                      TrackBrush="#29E8C9A0"
                                                      GlowBrush="{DynamicResource CopperBrush}"
@@ -184,7 +187,7 @@
             </StackPanel>
         </Border>
 
-        <Border x:Name="Overlay" Background="#99000000" Visibility="Collapsed" MouseLeftButtonDown="Overlay_Click">
+        <Border x:Name="Overlay" Background="#99000000" Visibility="Collapsed" Opacity="0" MouseLeftButtonDown="Overlay_Click">
             <Border x:Name="OverlayCard" Width="460" MaxHeight="720" CornerRadius="18" Padding="24"
                     Background="{DynamicResource PanelBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"
                     MouseLeftButtonDown="OverlayCard_Click">

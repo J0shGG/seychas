@@ -38,7 +38,29 @@ public static class Native
     {
         var px = new Drawing.Point((int)Math.Round(dipPoint.X * dpi.ScaleX), (int)Math.Round(dipPoint.Y * dpi.ScaleY));
         var area = Forms.Screen.FromPoint(px).WorkingArea;
-        return new Rect(area.Left / dpi.ScaleX, area.Top / dpi.ScaleY, area.Width / dpi.ScaleX, area.Height / dpi.ScaleY);
+        return PixelRectToDip(area, dpi);
+    }
+
+    public static Rect MonitorAreaDip(Window window, bool fullMonitor)
+    {
+        var hwnd = new WindowInteropHelper(window).Handle;
+        Forms.Screen screen;
+        if (hwnd != IntPtr.Zero)
+            screen = Forms.Screen.FromHandle(hwnd);
+        else
+        {
+            GetCursorPos(out var p);
+            screen = Forms.Screen.FromPoint(new Drawing.Point(p.X, p.Y));
+        }
+        var px = fullMonitor ? screen.Bounds : screen.WorkingArea;
+        return PixelRectToDip(px, DpiOf(window));
+    }
+
+    static Rect PixelRectToDip(Drawing.Rectangle px, VisualDpi dpi)
+    {
+        var sx = dpi.ScaleX == 0 ? 1 : dpi.ScaleX;
+        var sy = dpi.ScaleY == 0 ? 1 : dpi.ScaleY;
+        return new Rect(px.Left / sx, px.Top / sy, px.Width / sx, px.Height / sy);
     }
 
     public static VisualDpi DpiOf(Window window)
