@@ -7,6 +7,7 @@
         MinWidth="980" MinHeight="700"
         Background="{DynamicResource WindowBgBrush}"
         FontFamily="{StaticResource Sans}"
+        FontWeight="SemiBold"
         Foreground="{DynamicResource GoldBrush}"
         WindowStartupLocation="CenterScreen"
         PreviewKeyDown="Window_PreviewKeyDown">
@@ -31,7 +32,7 @@
                                 </Border.Background>
                             </Border>
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Лампа" FontFamily="{StaticResource Serif}" FontSize="42" Foreground="{DynamicResource PaperBrush}"/>
+                                <TextBlock Text="Лампа" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="42" Foreground="{DynamicResource PaperBrush}"/>
                                 <TextBlock Text="одна задача" FontSize="13" Foreground="{DynamicResource MutedBrush}" Margin="0,-6,0,0"/>
                             </StackPanel>
                         </StackPanel>
@@ -80,16 +81,11 @@
                     </Grid>
                     <StackPanel Grid.Row="1" Margin="0,22,0,18">
                         <TextBlock Text="Сегодня важно" FontSize="12" Foreground="{DynamicResource MutedBrush}"/>
-                        <TextBox x:Name="IntentionBox" FontFamily="{StaticResource Serif}" FontSize="22"
-                                 TextChanged="IntentionBox_TextChanged"
-                                 BorderThickness="0" Background="Transparent"
-                                 CaretBrush="{DynamicResource CopperBrightBrush}">
-                            <TextBox.Style>
-                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-                                    <Setter Property="Foreground" Value="{DynamicResource PaperBrush}"/>
-                                </Style>
-                            </TextBox.Style>
-                        </TextBox>
+                        <TextBox x:Name="IntentionBox"
+                                 Style="{StaticResource IntentionField}"
+                                 FontFamily="{StaticResource Serif}"
+                                 FontSize="22"
+                                 TextChanged="IntentionBox_TextChanged"/>
                     </StackPanel>
                     <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
@@ -99,13 +95,14 @@
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource PanelBox}" Margin="0,0,12,0">
                             <DockPanel>
-                                <TextBlock DockPanel.Dock="Top" Text="На столе" FontFamily="{StaticResource Serif}" FontSize="22" Margin="0,0,0,12"/>
+                                <TextBlock DockPanel.Dock="Top" Text="На столе" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="22" Margin="0,0,0,12"/>
                                 <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBox x:Name="NewTaskBox" MaxLength="120" KeyDown="NewTaskBox_KeyDown"/>
+                                    <TextBox x:Name="NewTaskBox" MaxLength="120" MinHeight="38"
+                                             Padding="10,12" KeyDown="NewTaskBox_KeyDown"/>
                                     <Button Grid.Column="1" Content="+" Style="{StaticResource Primary}" Margin="8,0,0,0" Padding="12,6" Click="AddTask_Click"/>
                                 </Grid>
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -121,7 +118,8 @@
                                 <Button x:Name="CompleteBtn" DockPanel.Dock="Bottom" Content="Задача готова" Style="{StaticResource Ghost}"
                                         HorizontalAlignment="Center" Margin="0,8,0,0" Click="CompleteActive_Click"/>
                                 <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
-                                    <TextBox x:Name="ThoughtBox" KeyDown="ThoughtBox_KeyDown"/>
+                                    <TextBox x:Name="ThoughtBox" MinHeight="38" Padding="10,12"
+                                             KeyDown="ThoughtBox_KeyDown"/>
                                     <StackPanel x:Name="ThoughtList" Margin="0,8,0,0"/>
                                 </StackPanel>
                                 <StackPanel VerticalAlignment="Center">
@@ -144,13 +142,13 @@
                                         </Button>
                                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
                                             <Ellipse Width="10" Height="10" Fill="{DynamicResource CopperBrightBrush}" Margin="0,0,0,8"/>
-                                            <TextBlock x:Name="ClockLabel" FontFamily="{StaticResource Serif}" FontSize="52"
+                                            <TextBlock x:Name="ClockLabel" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="52"
                                                        Foreground="{DynamicResource PaperBrush}" HorizontalAlignment="Center"/>
                                             <TextBlock x:Name="KindLabel" FontSize="11" Foreground="{DynamicResource MutedBrush}"
                                                        HorizontalAlignment="Center" Margin="0,6,0,0"/>
                                         </StackPanel>
                                     </Grid>
-                                    <TextBlock x:Name="StageTitle" FontFamily="{StaticResource Serif}" FontSize="26"
+                                    <TextBlock x:Name="StageTitle" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="26"
                                                Foreground="{DynamicResource PaperBrush}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,8,0,0"/>
                                     <TextBlock x:Name="StageHint" FontSize="13" Foreground="{DynamicResource MutedBrush}"
                                                HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0"/>
@@ -159,7 +157,7 @@
                         </Border>
                         <Border Grid.Column="2" Style="{StaticResource PanelBox}" Margin="12,0,0,0">
                             <StackPanel>
-                                <TextBlock Text="Сегодня" FontFamily="{StaticResource Serif}" FontSize="22" Margin="0,0,0,12"/>
+                                <TextBlock Text="Сегодня" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="22" Margin="0,0,0,12"/>
                                 <Grid Margin="0,0,0,6">
                                     <TextBlock Text="В фокусе" Foreground="{DynamicResource MutedBrush}"/>
                                     <TextBlock x:Name="TodayFocus" HorizontalAlignment="Right" FontWeight="SemiBold"/>
@@ -172,14 +170,14 @@
                                     <TextBlock Text="Сделано" Foreground="{DynamicResource MutedBrush}"/>
                                     <TextBlock x:Name="TodayDone" HorizontalAlignment="Right" FontWeight="SemiBold"/>
                                 </Grid>
-                                <TextBlock Text="Эта неделя" FontFamily="{StaticResource Serif}" FontSize="18" Margin="0,8,0,8"/>
+                                <TextBlock Text="Эта неделя" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="18" Margin="0,8,0,8"/>
                                 <UniformGrid x:Name="WeekStrip" Columns="7" Margin="0,0,0,8"/>
                                 <Grid Margin="0,0,0,12">
                                     <TextBlock Text="За неделю" Foreground="{DynamicResource MutedBrush}"/>
                                     <TextBlock x:Name="WeekTotal" HorizontalAlignment="Right" FontWeight="SemiBold"/>
                                 </Grid>
                                 <Button Content="Все дни" Style="{StaticResource Ghost}" Click="OpenJournal_Click"/>
-                                <TextBlock Text="Закрыто" FontFamily="{StaticResource Serif}" FontSize="18" Margin="0,18,0,8"/>
+                                <TextBlock Text="Закрыто" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="18" Margin="0,18,0,8"/>
                                 <StackPanel x:Name="DoneList"/>
                             </StackPanel>
                         </Border>
@@ -209,7 +207,7 @@
                         <ImageBrush ImageSource="pack://application:,,,/Assets/icon.jpg"/>
                     </Border.Background>
                 </Border>
-                <TextBlock Text="Лампа" FontFamily="{StaticResource Serif}" FontSize="48" HorizontalAlignment="Center" Foreground="{DynamicResource PaperBrush}"/>
+                <TextBlock Text="Лампа" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="48" HorizontalAlignment="Center" Foreground="{DynamicResource PaperBrush}"/>
                 <TextBlock Text="В каждый момент — только одна задача." FontSize="16" HorizontalAlignment="Center" Margin="0,8,0,4"/>
                 <TextBlock Text="Поставь её на стол, зажги лампу и работай, пока горит свет."
                            FontSize="14" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center" Margin="0,0,0,22"/>

@@ -13,6 +13,11 @@ public static class Native
     const int GwlExStyle = -20;
     const int DwmwaCloaked = 14;
     const int DwmwaExtendedFrameBounds = 9;
+    const int DwmwaUseImmersiveDarkModeOld = 19;
+    const int DwmwaUseImmersiveDarkMode = 20;
+    const int DwmwaBorderColor = 34;
+    const int DwmwaCaptionColor = 35;
+    const int DwmwaTextColor = 36;
     const int MonitorDefaultToNearest = 2;
     const uint SwpNomove = 0x0001;
     const uint SwpNosize = 0x0002;
@@ -27,6 +32,52 @@ public static class Native
     ];
 
     public static bool LeftButtonDown() => (GetAsyncKeyState(VkLButton) & 0x8000) != 0;
+
+    public static void TintCaption(Window window)
+    {
+        var hwnd = new WindowInteropHelper(window).Handle;
+        if (hwnd == IntPtr.Zero) hwnd = new WindowInteropHelper(window).EnsureHandle();
+        if (hwnd == IntPtr.Zero) return;
+        var bg = ResourceColor("WindowBg", 0x12, 0x0E, 0x0B);
+        var fg = ResourceColor("Paper", 0xF3, 0xEA, 0xD8);
+        var dark = 0.2126 * bg.R + 0.7152 * bg.G + 0.0722 * bg.B < 140 ? 1 : 0;
+        SetDwmInt(hwnd, DwmwaUseImmersiveDarkMode, dark);
+        SetDwmInt(hwnd, DwmwaUseImmersiveDarkModeOld, dark);
+        var caption = ColorRef(bg);
+        SetDwmUInt(hwnd, DwmwaCaptionColor, caption);
+        SetDwmUInt(hwnd, DwmwaTextColor, ColorRef(fg));
+        SetDwmUInt(hwnd, DwmwaBorderColor, caption);
+    }
+
+    public static void TintOpenWindows()
+    {
+        if (Application.Current is null) return;
+        foreach (Window window in Application.Current.Windows)
+        {
+            if (window.AllowsTransparency && window.WindowStyle == WindowStyle.None) continue;
+            if (!window.IsLoaded && new WindowInteropHelper(window).Handle == IntPtr.Zero) continue;
+            try { TintCaption(window); } catch { /* DWM missing */ }
+        }
+    }
+
+    static Color ResourceColor(string key, byte r, byte g, byte b)
+    {
+        try
+        {
+            if (Application.Current?.TryFindResource(key) is Color color) return color;
+            if (Application.Current?.TryFindResource(key + "Brush") is System.Windows.Media.SolidColorBrush brush) return brush.Color;
+        }
+        catch { }
+        return Color.FromRgb(r, g, b);
+    }
+
+    static uint ColorRef(Color color) => (uint)(color.R | color.G << 8 | color.B << 16);
+
+    static void SetDwmInt(IntPtr hwnd, int attr, int value) =>
+        DwmSetWindowAttribute(hwnd, attr, ref value, sizeof(int));
+
+    static void SetDwmUInt(IntPtr hwnd, int attr, uint value) =>
+        DwmSetWindowAttributeUInt(hwnd, attr, ref value, sizeof(uint));
 
     public static Point CursorDip(VisualDpi dpi)
     {
@@ -263,6 +314,9 @@ public static class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+    [DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute")]
+    static extern int DwmSetWindowAttributeUInt(IntPtr hwnd, int dwAttribute, ref uint pvAttribute, int cbAttribute);
     [DllImport("shell32.dll")] static extern int SHQueryUserNotificationState(out int pquns);
 
     [StructLayout(LayoutKind.Sequential)]

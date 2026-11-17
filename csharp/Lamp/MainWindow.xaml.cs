@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using Lamp.Core;
+using Lamp.Services;
 
 namespace Lamp;
 
@@ -16,13 +17,22 @@ public partial class MainWindow : Window
     int _journalYear = DateTime.Now.Year;
     int _journalMonth = DateTime.Now.Month;
     OverlayKind _overlay;
+    UpdateOffer? _updateOffer;
+    bool _updateShown;
+    bool _updateBusy;
+    double _updateProgress = -1;
+    string? _updateError;
+    Button? _updateInstallBtn;
+    Border? _updateBar;
+    Border? _updateFill;
 
-    enum OverlayKind { None, Settings, Journal, Finished }
+    enum OverlayKind { None, Settings, Journal, Finished, Update }
 
     public MainWindow(LampStore store)
     {
         _store = store;
         InitializeComponent();
+        SourceInitialized += (_, _) => Native.TintCaption(this);
         DataContext = _store;
         _store.Changed += () => Dispatcher.Invoke(Refresh);
         NewTaskBox.GotFocus += (_, _) => { if (NewTaskBox.Text == "Добавить задачу") NewTaskBox.Text = ""; };
@@ -31,6 +41,7 @@ public partial class MainWindow : Window
         {
             PlaceholderFields();
             Refresh();
+            _ = CheckForUpdateAsync();
         };
     }
 
@@ -78,6 +89,8 @@ public partial class MainWindow : Window
             ShowFinished();
         else if (s.Session?.Status != SessionStatus.done && _overlay == OverlayKind.Finished)
             HideOverlay();
+        else
+            TryShowUpdate();
     }
 
     void BuildPresets()
@@ -183,6 +196,7 @@ public partial class MainWindow : Window
                         {
                             Text = task.Title,
                             FontFamily = (FontFamily)FindResource("Serif"),
+                            FontWeight = FontWeights.Bold,
                             FontSize = 18,
                             Foreground = ColorBrush("#1c1612"),
                             TextWrapping = TextWrapping.Wrap,
@@ -318,7 +332,7 @@ public partial class MainWindow : Window
         2 => new SolidColorBrush(Color.FromArgb(0x88, 196, 120, 74)),
         3 => new SolidColorBrush(Color.FromArgb(0xBB, 196, 120, 74)),
         4 => new SolidColorBrush(Color.FromRgb(196, 120, 74)),
-        _ => new SolidColorBrush(Color.FromArgb(0x22, 255, 255, 255)),
+        _ => new SolidColorBrush(Color.FromArgb(0x28, 232, 201, 160)),
     };
 
     void AddTask_Click(object sender, RoutedEventArgs e) => AddTask();
@@ -406,18 +420,41 @@ public partial class MainWindow : Window
     void Overlay_Click(object sender, MouseButtonEventArgs e)
     {
         if (_overlay == OverlayKind.Finished) return;
+        if (_overlay == OverlayKind.Update)
+        {
+            DismissUpdate();
+            return;
+        }
         HideOverlay();
     }
 
     void OverlayCard_Click(object sender, MouseButtonEventArgs e) => e.Handled = true;
 
+    void DismissUpdate()
+    {
+        if (_overlay != OverlayKind.Update || _updateBusy) return;
+        _updateOffer = null;
+        HideOverlay();
+    }
+
     void HideOverlay()
     {
+        if (_overlay == OverlayKind.Update && _updateBusy) return;
         _overlay = OverlayKind.None;
         var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(160));
         fade.Completed += (_, _) =>
         {
             if (_overlay != OverlayKind.None) return;
+            if (_store.State.Session?.Status == SessionStatus.done)
+            {
+                ShowFinished();
+                return;
+            }
+            if (CanShowUpdate())
+            {
+                ShowUpdate();
+                return;
+            }
             Overlay.Visibility = Visibility.Collapsed;
             OverlayBody.Children.Clear();
         };
@@ -507,6 +544,7 @@ public partial class MainWindow : Window
         {
             Text = "Дни работы",
             FontFamily = (FontFamily)FindResource("Serif"),
+            FontWeight = FontWeights.Bold,
             FontSize = 26,
             VerticalAlignment = VerticalAlignment.Center,
         });
@@ -558,18 +596,35 @@ public partial class MainWindow : Window
                 continue;
             }
             var ms = (byDate.TryGetValue(key, out var day) ? day.FocusedMs : 0) + (key == Format.TodayKey() ? _store.LiveFocusMs : 0);
+            var future = key.CompareTo(Format.TodayKey()) > 0;
+            var dayInk = (Brush)FindResource(future ? "GoldBrush" : "PaperBrush");
             var cell = new Button
             {
                 Content = new StackPanel
                 {
                     Children =
                     {
-                        new TextBlock { Text = int.Parse(key[^2..]).ToString(), HorizontalAlignment = System.Windows.HorizontalAlignment.Center },
-                        new TextBlock { Text = Format.FormatCompact(ms), HorizontalAlignment = System.Windows.HorizontalAlignment.Center, FontSize = 10 },
+                        new TextBlock
+                        {
+                            Text = int.Parse(key[^2..]).ToString(),
+                            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                            Foreground = dayInk,
+                        },
+                        new TextBlock
+                        {
+                            Text = Format.FormatCompact(ms),
+                            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                            FontSize = 10,
+                            Foreground = (Brush)FindResource("MutedBrush"),
+                        },
                     },
                 },
-                Background = HeatBrush(Format.HeatLevel(ms)),
-                IsEnabled = key.CompareTo(Format.TodayKey()) <= 0,
+                Background = future
+                    ? (Brush)FindResource("IslandFillBrush")
+                    : HeatBrush(Format.HeatLevel(ms)),
+                Foreground = dayInk,
+                IsHitTestVisible = !future,
+                Focusable = !future,
                 Tag = key,
                 Margin = new Thickness(2),
                 Style = (Style)FindResource("CalCell"),
@@ -587,6 +642,7 @@ public partial class MainWindow : Window
         {
             Text = Format.FormatDayHeading(_journalDay),
             FontFamily = (FontFamily)FindResource("Serif"),
+            FontWeight = FontWeights.Bold,
             FontSize = 20,
             Margin = new Thickness(0, 16, 0, 4),
         });
@@ -649,6 +705,136 @@ public partial class MainWindow : Window
             HideOverlay();
         }));
         OverlayBody.Children.Add(actions);
+    }
+
+    async Task CheckForUpdateAsync()
+    {
+        UpdateOffer? offer;
+        try { offer = await Task.Run(() => UpdateService.CheckAsync()).ConfigureAwait(true); }
+        catch { return; }
+        if (offer is null) return;
+        _updateOffer = offer;
+        TryShowUpdate();
+    }
+
+    bool CanShowUpdate() =>
+        _updateOffer is not null && !_updateShown && _store.State.Onboarded && _overlay == OverlayKind.None;
+
+    void TryShowUpdate()
+    {
+        if (CanShowUpdate()) ShowUpdate();
+    }
+
+    void ShowUpdate()
+    {
+        var offer = _updateOffer;
+        if (offer is null) return;
+        _updateShown = true;
+        if (_overlay != OverlayKind.Update)
+            ShowOverlay(OverlayKind.Update);
+        else
+            OverlayBody.Children.Clear();
+        OverlayCard.Width = 440;
+        OverlayBody.Children.Add(Head("Есть новая версия"));
+        OverlayBody.Children.Add(new TextBlock
+        {
+            Text = $"На GitHub вышла {offer.Version}. Сейчас у тебя {offer.Current}. Установщик скачается, откроется, и «Лампа» закроется.",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 16),
+        });
+
+        _updateBar = new Border
+        {
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
+            Background = new SolidColorBrush(Color.FromArgb(0x38, 232, 201, 160)),
+            Margin = new Thickness(0, 0, 0, 16),
+            ClipToBounds = true,
+            Visibility = Visibility.Collapsed,
+        };
+        _updateFill = new Border
+        {
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
+            Background = (Brush)FindResource("CopperBrush"),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+            Width = 0,
+        };
+        _updateBar.Child = _updateFill;
+        _updateBar.SizeChanged += (_, _) => ApplyUpdateProgress();
+        OverlayBody.Children.Add(_updateBar);
+
+        OverlayBody.Children.Add(new TextBlock
+        {
+            Text = _updateError ?? "",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)FindResource("CopperBrightBrush"),
+            Margin = new Thickness(0, 0, 0, 12),
+            Visibility = string.IsNullOrEmpty(_updateError) ? Visibility.Collapsed : Visibility.Visible,
+        });
+
+        var percent = _updateBusy && _updateProgress >= 0 ? (int?)(int)Math.Round(_updateProgress * 100) : null;
+        var actions = new WrapPanel();
+        _updateInstallBtn = ActionButton(
+            _updateBusy ? (percent is null ? "Скачиваю…" : $"Скачиваю {percent}%") : "Обновить",
+            true,
+            () => _ = InstallUpdate());
+        _updateInstallBtn.IsEnabled = !_updateBusy;
+        var later = ActionButton("Позже", false, DismissUpdate);
+        later.IsEnabled = !_updateBusy;
+        actions.Children.Add(_updateInstallBtn);
+        actions.Children.Add(later);
+        OverlayBody.Children.Add(actions);
+        ApplyUpdateProgress();
+    }
+
+    void ApplyUpdateProgress()
+    {
+        if (_overlay != OverlayKind.Update) return;
+        var percent = _updateBusy && _updateProgress >= 0 ? (int?)(int)Math.Round(_updateProgress * 100) : null;
+        if (_updateInstallBtn is not null && _updateBusy)
+            _updateInstallBtn.Content = percent is null ? "Скачиваю…" : $"Скачиваю {percent}%";
+        if (_updateBar is null || _updateFill is null) return;
+        if (!_updateBusy || percent is null)
+        {
+            _updateBar.Visibility = Visibility.Collapsed;
+            return;
+        }
+        _updateBar.Visibility = Visibility.Visible;
+        var width = _updateBar.ActualWidth;
+        _updateFill.Width = width > 0 ? width * Math.Clamp(_updateProgress, 0, 1) : 0;
+    }
+
+    async Task InstallUpdate()
+    {
+        if (_updateBusy || _updateOffer is null) return;
+        _updateBusy = true;
+        _updateError = null;
+        _updateProgress = -1;
+        ShowUpdate();
+        try
+        {
+            var progress = new Progress<double>(ratio =>
+            {
+                _updateProgress = ratio;
+                ApplyUpdateProgress();
+            });
+            var file = await UpdateService.DownloadAsync(progress).ConfigureAwait(true);
+            if (!UpdateService.TryOpenInstaller(file))
+            {
+                _updateBusy = false;
+                _updateError = "Не получилось открыть установщик.";
+                ShowUpdate();
+                return;
+            }
+            App.Current.Quit();
+        }
+        catch
+        {
+            _updateBusy = false;
+            _updateError = "Не получилось скачать обновление.";
+            ShowUpdate();
+        }
     }
 
     Button ActionButton(string text, bool primary, Action click)
@@ -717,6 +903,12 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Escape)
         {
+            if (_overlay == OverlayKind.Update)
+            {
+                DismissUpdate();
+                e.Handled = true;
+                return;
+            }
             if (_overlay is OverlayKind.Settings or OverlayKind.Journal)
             {
                 HideOverlay();

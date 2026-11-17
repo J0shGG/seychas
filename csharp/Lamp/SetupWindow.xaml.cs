@@ -11,6 +11,7 @@ public partial class SetupWindow : Window
     public SetupWindow()
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => Native.TintCaption(this);
     }
 
     async void Window_Loaded(object sender, RoutedEventArgs e)

@@ -12,9 +12,9 @@
     <Product>Лампа</Product>
     <Description>Лампа — фокус на одной задаче</Description>
     <Authors>J0shGG</Authors>
-    <Version>2.1.0</Version>
-    <FileVersion>2.1.0</FileVersion>
-    <InformationalVersion>2.1.0</InformationalVersion>
+    <Version>2.2.0</Version>
+    <FileVersion>2.2.0</FileVersion>
+    <InformationalVersion>2.2.0</InformationalVersion>
     <AssemblyTitle>Лампа</AssemblyTitle>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -33,6 +33,7 @@
     <Resource Include="Assets\icon.jpg" />
     <Resource Include="Assets\tray.png" />
     <Resource Include="Assets\icon.png" />
+    <Resource Include="Assets\Fonts\*.ttf" />
     <Content Include="Assets\icon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

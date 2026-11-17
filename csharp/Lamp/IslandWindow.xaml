@@ -10,7 +10,9 @@
         Topmost="True"
         ResizeMode="NoResize"
         ShowActivated="False"
-        Focusable="False">
+        Focusable="False"
+        FontFamily="{StaticResource Sans}"
+        FontWeight="SemiBold">
     <Grid>
         <Border x:Name="Capsule"
                 Width="292" Height="48"
@@ -47,8 +49,8 @@
                             </Ellipse.RenderTransform>
                         </Ellipse>
                         <TextBlock x:Name="TimeText" Grid.Column="1"
-                                   FontFamily="{StaticResource Serif}" FontSize="15"
-                                   FontWeight="Bold" Foreground="{DynamicResource PaperBrush}"
+                                   FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="15"
+                                   Foreground="{DynamicResource PaperBrush}"
                                    VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <TextBlock x:Name="LabelText" Grid.Column="2"
                                    FontFamily="{StaticResource Sans}" FontSize="12"
@@ -71,7 +73,7 @@
                         <StackPanel.RenderTransform>
                             <TranslateTransform x:Name="BodyShift" Y="10"/>
                         </StackPanel.RenderTransform>
-                        <TextBlock x:Name="TitleText" FontFamily="{StaticResource Serif}" FontSize="16"
+                        <TextBlock x:Name="TitleText" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="16"
                                    Foreground="{DynamicResource PaperBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
                         <TextBlock x:Name="PaceText" FontSize="12" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap"/>
                         <TextBlock x:Name="TodayText" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,2,0,0"/>
@@ -94,7 +96,7 @@
                             </Ellipse.RenderTransform>
                         </Ellipse>
                         <TextBlock x:Name="RailTime"
-                                   FontFamily="{StaticResource Serif}" FontSize="14" FontWeight="Bold"
+                                   FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="14"
                                    Foreground="{DynamicResource PaperBrush}"
                                    HorizontalAlignment="Center">
                             <TextBlock.LayoutTransform>

@@ -26,21 +26,104 @@
         <SolidColorBrush x:Key="IslandOpenBrush" Color="{StaticResource IslandOpen}"/>
         <SolidColorBrush x:Key="IslandLineBrush" Color="{StaticResource IslandLine}"/>
         <SolidColorBrush x:Key="DeskBackground" Color="#120e0b"/>
-        <FontFamily x:Key="Serif">Georgia, Palatino Linotype, Times New Roman, serif</FontFamily>
-        <FontFamily x:Key="Sans">Segoe UI, Segoe UI Variable, sans-serif</FontFamily>
+        <FontFamily x:Key="Serif">pack://application:,,,/Assets/Fonts/#PT Serif, Constantia, Georgia</FontFamily>
+        <FontFamily x:Key="Sans">pack://application:,,,/Assets/Fonts/#Nunito, Candara, Segoe UI</FontFamily>
+        <Style TargetType="Window">
+            <Setter Property="Background" Value="{DynamicResource WindowBgBrush}"/>
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Sans}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
         <Style TargetType="Button">
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontFamily" Value="{StaticResource Sans}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
         </Style>
+        <ControlTemplate x:Key="FieldTemplate" TargetType="TextBox">
+            <Border x:Name="Bd"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="10"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+                <ScrollViewer x:Name="PART_ContentHost"
+                              Focusable="False"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Hidden"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="#48E8C9A0"/>
+                    <Setter TargetName="Bd" Property="Background" Value="#10FFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource CopperBrightBrush}"/>
+                    <Setter TargetName="Bd" Property="Background" Value="#18FFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+        <ControlTemplate x:Key="IntentionTemplate" TargetType="TextBox">
+            <Border x:Name="Bd"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="0"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+                <ScrollViewer x:Name="PART_ContentHost"
+                              Focusable="False"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Hidden"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="#48E8C9A0"/>
+                </Trigger>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource CopperBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
         <Style TargetType="TextBox">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="KeyboardNavigation.TabNavigation" Value="None"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="FontFamily" Value="{StaticResource Sans}"/>
-            <Setter Property="Foreground" Value="{DynamicResource GoldBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource PaperBrush}"/>
             <Setter Property="CaretBrush" Value="{DynamicResource CopperBrightBrush}"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource CopperBrush}"/>
+            <Setter Property="SelectionOpacity" Value="0.35"/>
             <Setter Property="Background" Value="#0AFFFFFF"/>
             <Setter Property="BorderBrush" Value="#24E8C9A0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template" Value="{StaticResource FieldTemplate}"/>
+        </Style>
+        <Style x:Key="IntentionField" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#24E8C9A0"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="Padding" Value="0,6"/>
+            <Setter Property="Padding" Value="0,8,0,12"/>
+            <Setter Property="FontFamily" Value="{StaticResource Serif}"/>
+            <Setter Property="FontStyle" Value="Italic"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Foreground" Value="{DynamicResource PaperBrush}"/>
+            <Setter Property="VerticalContentAlignment" Value="Bottom"/>
+            <Setter Property="Template" Value="{StaticResource IntentionTemplate}"/>
         </Style>
         <ControlTemplate x:Key="RectButton" TargetType="Button">
             <Border x:Name="Bd"
@@ -159,14 +242,19 @@
                             Background="{DynamicResource CopperBrightBrush}"
                             CornerRadius="6"
                             Opacity="0"/>
-                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      TextElement.Foreground="{TemplateBinding Foreground}"/>
                 </Grid>
             </Border>
             <ControlTemplate.Triggers>
+                <Trigger Property="IsHitTestVisible" Value="False">
+                    <Setter TargetName="Lift" Property="Opacity" Value="0"/>
+                    <Setter Property="Cursor" Value="Arrow"/>
+                </Trigger>
                 <MultiTrigger>
                     <MultiTrigger.Conditions>
                         <Condition Property="IsMouseOver" Value="True"/>
-                        <Condition Property="IsEnabled" Value="True"/>
+                        <Condition Property="IsHitTestVisible" Value="True"/>
                     </MultiTrigger.Conditions>
                     <Setter TargetName="Lift" Property="Opacity" Value="0.2"/>
                     <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource CopperBrightBrush}"/>
@@ -175,17 +263,10 @@
                 <MultiTrigger>
                     <MultiTrigger.Conditions>
                         <Condition Property="IsPressed" Value="True"/>
-                        <Condition Property="IsEnabled" Value="True"/>
+                        <Condition Property="IsHitTestVisible" Value="True"/>
                     </MultiTrigger.Conditions>
                     <Setter TargetName="Bd" Property="Opacity" Value="0.88"/>
                 </MultiTrigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource IslandOpenBrush}"/>
-                    <Setter TargetName="Bd" Property="Opacity" Value="0.82"/>
-                    <Setter TargetName="Lift" Property="Opacity" Value="0"/>
-                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
-                    <Setter Property="Cursor" Value="Arrow"/>
-                </Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate>
         <Style x:Key="CalCell" TargetType="Button">
@@ -200,9 +281,10 @@
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Template" Value="{StaticResource CalCellTemplate}"/>
             <Style.Triggers>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                <Trigger Property="IsHitTestVisible" Value="False">
+                    <Setter Property="Foreground" Value="{DynamicResource GoldBrush}"/>
                     <Setter Property="Cursor" Value="Arrow"/>
+                    <Setter Property="Background" Value="{DynamicResource IslandFillBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>

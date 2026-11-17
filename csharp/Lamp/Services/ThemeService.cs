@@ -60,6 +60,7 @@ public static class ThemeService
         r["IslandOpenBrush"] = new SolidColorBrush((Color)r["IslandOpen"]);
         r["IslandLineBrush"] = new SolidColorBrush((Color)r["IslandLine"]);
         r["WindowBgBrush"] = new SolidColorBrush((Color)r["WindowBg"]);
+        Native.TintOpenWindows();
     }
 
     static void Set(ResourceDictionary r, string paper, string muted, string copper, string bright, string gold, string window, string panel, double panelA)

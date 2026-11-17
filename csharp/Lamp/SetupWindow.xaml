@@ -7,6 +7,7 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBgBrush}"
         FontFamily="{StaticResource Sans}"
+        FontWeight="SemiBold"
         Foreground="{DynamicResource GoldBrush}"
         Loaded="Window_Loaded">
     <Grid Margin="28,24">
@@ -24,7 +25,7 @@
                 </Border.Background>
             </Border>
             <StackPanel VerticalAlignment="Center">
-                <TextBlock Text="Лампа 2.0" FontFamily="{StaticResource Serif}" FontSize="28" Foreground="{DynamicResource PaperBrush}"/>
+                <TextBlock Text="Лампа 2.0" FontFamily="{StaticResource Serif}" FontWeight="Bold" FontSize="28" Foreground="{DynamicResource PaperBrush}"/>
                 <TextBlock Text="переход с Electron" FontSize="13" Foreground="{DynamicResource MutedBrush}" Margin="0,-2,0,0"/>
             </StackPanel>
         </StackPanel>
